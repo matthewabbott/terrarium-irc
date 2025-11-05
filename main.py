@@ -84,7 +84,10 @@ async def main():
     )
 
     # Register commands
+    print("\nRegistering commands...")
     CommandHandler.register_all(bot)
+    print(f"Registered commands: {list(bot.command_handlers.keys())}")
+    print(f"Command prefix: '{command_prefix}'")
 
     # Run bot
     print("\nStarting bot...\n")

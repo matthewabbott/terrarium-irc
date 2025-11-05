@@ -130,11 +130,13 @@ class TerrariumBot:
                 self.loop
             )
 
-        @self.irc.Handler("PRIVMSG", "NOTICE")
+        @self.irc.Handler("PRIVMSG", "NOTICE", colon=False)
         def handle_message(irc, hostmask, args):
             channel = args[0]
             text = args[-1]
             nick = hostmask[0]
+
+            print(f"← [{channel}] <{nick}> {text}")
 
             # Log message (run from thread-safe context)
             asyncio.run_coroutine_threadsafe(
@@ -150,6 +152,7 @@ class TerrariumBot:
 
             # Handle commands (run from thread-safe context)
             if text.startswith(self.command_prefix):
+                print(f"  Command detected: {text}")
                 asyncio.run_coroutine_threadsafe(
                     self._handle_command(
                         channel=channel,
@@ -232,37 +235,57 @@ class TerrariumBot:
 
     async def _handle_command(self, channel: str, nick: str, text: str):
         """Handle a command message."""
+        print(f"  _handle_command called: channel={channel}, nick={nick}, text={text}")
+
         # Parse command
         parts = text[len(self.command_prefix):].split(None, 1)
         if not parts:
+            print(f"  No command found after prefix")
             return
 
         command = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
+        print(f"  Parsed command: {command}, args: {args}")
 
         # Check if command exists
         if command in self.command_handlers:
+            print(f"  Found handler for command: {command}")
             try:
                 handler = self.command_handlers[command]
                 await handler(self, channel, nick, args)
+                print(f"  Handler completed successfully")
             except Exception as e:
-                print(f"Error handling command {command}: {e}")
+                print(f"  Error handling command {command}: {e}")
+                import traceback
+                traceback.print_exc()
                 self.send_message(channel, f"Error: {str(e)}")
+        else:
+            print(f"  Unknown command: {command}")
+            print(f"  Available commands: {list(self.command_handlers.keys())}")
 
     def send_message(self, target: str, message: str):
         """Send a message to a channel or user."""
+        print(f"→ [{target}] {message}")
         if self.irc:
             self.irc.msg(target, message)
+            print(f"  Message sent via IRC")
+        else:
+            print(f"  ERROR: IRC client not initialized!")
 
     def send_messages(self, target: str, messages: List[str], delay: float = 0.5):
         """Send multiple messages with delay to avoid flooding."""
+        print(f"  send_messages called for {target}, {len(messages)} messages")
         async def send_delayed():
             for msg in messages:
                 self.send_message(target, msg)
                 if delay > 0 and msg != messages[-1]:  # Don't delay after last message
                     await asyncio.sleep(delay)
 
-        asyncio.create_task(send_delayed())
+        # Make sure to use the proper event loop
+        if self.loop:
+            asyncio.run_coroutine_threadsafe(send_delayed(), self.loop)
+        else:
+            asyncio.create_task(send_delayed())
 
     async def get_recent_context(
         self,

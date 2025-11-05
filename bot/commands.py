@@ -23,6 +23,7 @@ class CommandHandler:
     @staticmethod
     async def cmd_help(bot: 'TerrariumBot', channel: str, nick: str, args: str):
         """Show help information."""
+        print(f"  cmd_help handler called for {nick} in {channel}")
         help_text = [
             f"{nick}: Available commands:",
             f"{bot.command_prefix}help - Show this help message",
@@ -37,6 +38,7 @@ class CommandHandler:
     @staticmethod
     async def cmd_ping(bot: 'TerrariumBot', channel: str, nick: str, args: str):
         """Simple ping command."""
+        print(f"  cmd_ping handler called for {nick} in {channel}")
         bot.send_message(channel, f"{nick}: pong!")
 
     @staticmethod
