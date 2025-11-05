@@ -10,6 +10,16 @@ if TYPE_CHECKING:
 class CommandHandler:
     """Handler for bot commands."""
 
+    # Command descriptions for help system
+    COMMAND_HELP = {
+        'help': 'Show available commands or get help for a specific command',
+        'ping': 'Check if the bot is responsive',
+        'ask': 'Ask the LLM a question without IRC context',
+        'terrarium': 'Ask the LLM with full IRC channel context',
+        'search': 'Search message history for a term',
+        'stats': 'Show channel statistics (messages, users, etc.)'
+    }
+
     @staticmethod
     def register_all(bot: 'TerrariumBot'):
         """Register all commands with the bot."""
@@ -24,16 +34,20 @@ class CommandHandler:
     async def cmd_help(bot: 'TerrariumBot', channel: str, nick: str, args: str):
         """Show help information."""
         print(f"  cmd_help handler called for {nick} in {channel}")
-        help_text = [
-            f"{nick}: Available commands:",
-            f"{bot.command_prefix}help - Show this help message",
-            f"{bot.command_prefix}ask <question> - Ask the LLM a question",
-            f"{bot.command_prefix}terrarium <question> - Ask with IRC context",
-            f"{bot.command_prefix}search <term> - Search message history",
-            f"{bot.command_prefix}stats - Show channel statistics",
-            f"{bot.command_prefix}ping - Check if bot is alive"
-        ]
-        bot.send_messages(channel, help_text)
+
+        # If a specific command is requested, show detailed help
+        if args:
+            command = args.strip().lower()
+            if command in CommandHandler.COMMAND_HELP:
+                description = CommandHandler.COMMAND_HELP[command]
+                bot.send_message(channel, f"{nick}: {bot.command_prefix}{command} - {description}")
+            else:
+                bot.send_message(channel, f"{nick}: Unknown command '{command}'. Try {bot.command_prefix}help for available commands.")
+            return
+
+        # Otherwise, show comma-separated list of commands
+        commands = ', '.join(f"{bot.command_prefix}{cmd}" for cmd in sorted(CommandHandler.COMMAND_HELP.keys()))
+        bot.send_message(channel, f"{nick}: Available commands: {commands}")
 
     @staticmethod
     async def cmd_ping(bot: 'TerrariumBot', channel: str, nick: str, args: str):
