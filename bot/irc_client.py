@@ -62,21 +62,32 @@ class TerrariumBot:
         self.loop = asyncio.get_event_loop()
 
         # Create IRC connection
+        print(f"Creating IRC client...")
         self.irc = miniirc.IRC(
             ip=self.server,
             port=self.port,
             nick=self.nick,
             channels=self.channels,
             ssl=self.use_ssl,
-            debug=False,
+            debug=True,  # Enable debug output
             auto_connect=False
         )
+        print(f"IRC client created.")
 
         # Register handlers
         @self.irc.Handler("001")  # RPL_WELCOME
         def handle_welcome(irc, hostmask, args):
-            print(f"Connected as {self.nick}")
-            print(f"Joining channels: {', '.join(self.channels)}")
+            print(f"✓ Connected to server as {self.nick}")
+            print(f"✓ Server message: {args}")
+
+        @self.irc.Handler("376", "422")  # End of MOTD or MOTD missing
+        def handle_motd_end(irc, hostmask, args):
+            print(f"✓ MOTD received, joining channels: {', '.join(self.channels)}")
+
+        @self.irc.Handler("PING")
+        def handle_ping(irc, hostmask, args):
+            print(f"← PING from server")
+            print(f"→ PONG response sent")
 
         @self.irc.Handler("JOIN")
         def handle_join(irc, hostmask, args):
@@ -84,7 +95,9 @@ class TerrariumBot:
             nick = hostmask[0]
 
             if nick == self.nick:
-                print(f"Joined {channel}")
+                print(f"✓ Successfully joined {channel}")
+            else:
+                print(f"  {nick} joined {channel}")
 
             # Log join event (run from thread-safe context)
             asyncio.run_coroutine_threadsafe(
@@ -146,10 +159,35 @@ class TerrariumBot:
                     self.loop
                 )
 
+        # Add error handler
+        @self.irc.Handler("ERROR")
+        def handle_error(irc, hostmask, args):
+            print(f"✗ IRC ERROR: {args}")
+
+        # Add numeric handlers for common errors
+        @self.irc.Handler("433")  # Nickname in use
+        def handle_nick_in_use(irc, hostmask, args):
+            print(f"✗ Nickname '{self.nick}' is already in use!")
+            print(f"  Try changing IRC_NICK in .env")
+
+        @self.irc.Handler("432", "431")  # Invalid nickname
+        def handle_invalid_nick(irc, hostmask, args):
+            print(f"✗ Invalid nickname: {args}")
+
+        @self.irc.Handler("465")  # Banned
+        def handle_banned(irc, hostmask, args):
+            print(f"✗ Banned from server: {args}")
+
         # Connect
-        self.irc.connect()
-        self.running = True
-        print("Bot is running. Press Ctrl+C to stop.")
+        print(f"Attempting connection...")
+        try:
+            self.irc.connect()
+            self.running = True
+            print("Bot connection initiated. Press Ctrl+C to stop.")
+            print("Waiting for server response...\n")
+        except Exception as e:
+            print(f"✗ Connection failed: {e}")
+            raise
 
     async def _log_message(
         self,
