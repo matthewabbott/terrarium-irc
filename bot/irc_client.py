@@ -48,6 +48,7 @@ class TerrariumBot:
         self.irc: Optional[miniirc.IRC] = None
         self.command_handlers = {}
         self.running = False
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
 
     def register_command(self, command: str, handler: Callable):
         """Register a command handler."""
@@ -56,6 +57,9 @@ class TerrariumBot:
     async def connect(self):
         """Connect to IRC server."""
         print(f"Connecting to {self.server}:{self.port}...")
+
+        # Store the event loop for use in IRC handlers
+        self.loop = asyncio.get_event_loop()
 
         # Create IRC connection
         self.irc = miniirc.IRC(
@@ -82,14 +86,17 @@ class TerrariumBot:
             if nick == self.nick:
                 print(f"Joined {channel}")
 
-            # Log join event
-            asyncio.create_task(self._log_event(
-                channel=channel,
-                nick=nick,
-                user=hostmask[1],
-                host=hostmask[2],
-                message_type="JOIN"
-            ))
+            # Log join event (run from thread-safe context)
+            asyncio.run_coroutine_threadsafe(
+                self._log_event(
+                    channel=channel,
+                    nick=nick,
+                    user=hostmask[1],
+                    host=hostmask[2],
+                    message_type="JOIN"
+                ),
+                self.loop
+            )
 
         @self.irc.Handler("PART")
         def handle_part(irc, hostmask, args):
@@ -97,15 +104,18 @@ class TerrariumBot:
             nick = hostmask[0]
             reason = args[1] if len(args) > 1 else ""
 
-            # Log part event
-            asyncio.create_task(self._log_event(
-                channel=channel,
-                nick=nick,
-                user=hostmask[1],
-                host=hostmask[2],
-                message=reason,
-                message_type="PART"
-            ))
+            # Log part event (run from thread-safe context)
+            asyncio.run_coroutine_threadsafe(
+                self._log_event(
+                    channel=channel,
+                    nick=nick,
+                    user=hostmask[1],
+                    host=hostmask[2],
+                    message=reason,
+                    message_type="PART"
+                ),
+                self.loop
+            )
 
         @self.irc.Handler("PRIVMSG", "NOTICE")
         def handle_message(irc, hostmask, args):
@@ -113,22 +123,28 @@ class TerrariumBot:
             text = args[-1]
             nick = hostmask[0]
 
-            # Log message
-            asyncio.create_task(self._log_message(
-                channel=channel,
-                nick=nick,
-                user=hostmask[1],
-                host=hostmask[2],
-                message=text
-            ))
-
-            # Handle commands
-            if text.startswith(self.command_prefix):
-                asyncio.create_task(self._handle_command(
+            # Log message (run from thread-safe context)
+            asyncio.run_coroutine_threadsafe(
+                self._log_message(
                     channel=channel,
                     nick=nick,
-                    text=text
-                ))
+                    user=hostmask[1],
+                    host=hostmask[2],
+                    message=text
+                ),
+                self.loop
+            )
+
+            # Handle commands (run from thread-safe context)
+            if text.startswith(self.command_prefix):
+                asyncio.run_coroutine_threadsafe(
+                    self._handle_command(
+                        channel=channel,
+                        nick=nick,
+                        text=text
+                    ),
+                    self.loop
+                )
 
         # Connect
         self.irc.connect()
