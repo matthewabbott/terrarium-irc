@@ -26,9 +26,10 @@ async def main():
     irc_channels = [ch.strip() for ch in irc_channels]
 
     # LLM Configuration
-    llm_backend = os.getenv('LLM_BACKEND', 'ollama')
     llm_model = os.getenv('LLM_MODEL', 'qwen2.5:7b')
     llm_api_url = os.getenv('LLM_API_URL', 'http://localhost:11434')
+    llm_temperature = float(os.getenv('LLM_TEMPERATURE', '0.7'))
+    llm_max_tokens = int(os.getenv('LLM_MAX_TOKENS', '1000'))
 
     # Bot Configuration
     command_prefix = os.getenv('COMMAND_PREFIX', '.')
@@ -43,7 +44,7 @@ async def main():
     print(f"Server: {irc_server}:{irc_port} (SSL: {irc_use_ssl})")
     print(f"Nick: {irc_nick}")
     print(f"Channels: {', '.join(irc_channels)}")
-    print(f"LLM: {llm_backend} ({llm_model})")
+    print(f"LLM: Ollama ({llm_model})")
     print(f"Database: {db_path}")
     print("="*60)
 
@@ -54,11 +55,12 @@ async def main():
     print("Database ready.")
 
     # Initialize LLM client
-    print(f"\nInitializing LLM client ({llm_backend})...")
+    print(f"\nInitializing LLM client (Ollama)...")
     llm_client = LLMClient(
-        backend=llm_backend,
         model=llm_model,
-        api_url=llm_api_url
+        api_url=llm_api_url,
+        temperature=llm_temperature,
+        max_tokens=llm_max_tokens
     )
 
     try:
@@ -67,6 +69,7 @@ async def main():
     except Exception as e:
         print(f"Warning: Failed to initialize LLM client: {e}")
         print("Bot will run but LLM commands may fail.")
+        print("Make sure Ollama is installed and running.")
 
     # Create bot instance
     bot = TerrariumBot(
