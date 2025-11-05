@@ -1,0 +1,26 @@
+[Unit]
+Description=Terrarium IRC Bot with LLM Integration
+After=network.target
+# If using Ollama, add dependency
+# After=ollama.service
+# If using vLLM, start it separately
+
+[Service]
+Type=simple
+User=USER_TO_REPLACE
+Group=USER_TO_REPLACE
+WorkingDirectory=/path/to/terrarium-irc
+Environment="PATH=/path/to/terrarium-irc/venv/bin"
+ExecStart=/path/to/terrarium-irc/venv/bin/python /path/to/terrarium-irc/main.py
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=terrarium-bot
+
+[Install]
+WantedBy=multi-user.target

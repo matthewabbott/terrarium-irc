@@ -1,0 +1,12 @@
+# IRC Bot Requirements
+miniirc>=1.9.1
+aiosqlite>=0.19.0
+
+# LLM Integration
+ollama>=0.1.0  # For Ollama
+openai>=1.0.0  # For vLLM (OpenAI-compatible API)
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
+asyncio>=3.4.3
