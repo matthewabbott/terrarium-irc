@@ -89,7 +89,7 @@ class TerrariumBot:
             print(f"← PING from server")
             print(f"→ PONG response sent")
 
-        @self.irc.Handler("JOIN")
+        @self.irc.Handler("JOIN", colon=False)
         def handle_join(irc, hostmask, args):
             channel = args[0]
             nick = hostmask[0]
@@ -111,7 +111,7 @@ class TerrariumBot:
                 self.loop
             )
 
-        @self.irc.Handler("PART")
+        @self.irc.Handler("PART", colon=False)
         def handle_part(irc, hostmask, args):
             channel = args[0]
             nick = hostmask[0]

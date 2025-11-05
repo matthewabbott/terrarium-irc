@@ -57,19 +57,28 @@ class Database:
         """)
 
         # Create indexes for performance
+        # Composite index for the most common query: recent messages by channel
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_channel_timestamp
+            ON messages(channel, timestamp DESC)
+        """)
+
+        # Index for time-based queries across all channels
         await self.db.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp
-            ON messages(timestamp)
+            ON messages(timestamp DESC)
         """)
 
-        await self.db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_messages_channel
-            ON messages(channel)
-        """)
-
+        # Index for user message lookups
         await self.db.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_nick
             ON messages(nick)
+        """)
+
+        # Index for filtering by message type (e.g., exclude JOIN/PART events)
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_type
+            ON messages(message_type)
         """)
 
         await self.db.commit()
@@ -113,9 +122,23 @@ class Database:
         self,
         channel: Optional[str] = None,
         limit: int = 50,
-        hours: Optional[int] = None
+        hours: Optional[int] = None,
+        message_types: Optional[List[str]] = None
     ) -> List[Message]:
-        """Get recent messages, optionally filtered by channel and time."""
+        """
+        Get recent messages, optionally filtered by channel and time.
+
+        Args:
+            channel: Filter by specific channel
+            limit: Maximum number of messages to return
+            hours: Only return messages from last N hours
+            message_types: Filter by message types (default: ['PRIVMSG'] for conversation only)
+                          Pass None to include all types including JOIN/PART
+        """
+        # Default to PRIVMSG only (conversation messages) unless explicitly specified
+        if message_types is None:
+            message_types = ['PRIVMSG']
+
         query = "SELECT * FROM messages WHERE 1=1"
         params = []
 
@@ -127,6 +150,11 @@ class Database:
             cutoff = datetime.now() - timedelta(hours=hours)
             query += " AND timestamp > ?"
             params.append(cutoff)
+
+        if message_types:
+            placeholders = ','.join('?' * len(message_types))
+            query += f" AND message_type IN ({placeholders})"
+            params.extend(message_types)
 
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
@@ -151,15 +179,33 @@ class Database:
         self,
         query: str,
         channel: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        message_types: Optional[List[str]] = None
     ) -> List[Message]:
-        """Search messages by content."""
+        """
+        Search messages by content.
+
+        Args:
+            query: Text to search for in messages
+            channel: Filter by specific channel
+            limit: Maximum number of messages to return
+            message_types: Filter by message types (default: ['PRIVMSG'] for conversation only)
+        """
+        # Default to PRIVMSG only (conversation messages)
+        if message_types is None:
+            message_types = ['PRIVMSG']
+
         sql = "SELECT * FROM messages WHERE message LIKE ?"
         params = [f"%{query}%"]
 
         if channel:
             sql += " AND channel = ?"
             params.append(channel)
+
+        if message_types:
+            placeholders = ','.join('?' * len(message_types))
+            sql += f" AND message_type IN ({placeholders})"
+            params.extend(message_types)
 
         sql += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
