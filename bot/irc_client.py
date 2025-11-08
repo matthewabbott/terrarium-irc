@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime
 from typing import Optional, Callable, List
 from storage import Database, Message
-from llm import LLMClient, ContextBuilder
+from llm import AgentClient, ContextBuilder, ContextManager
 
 
 class TerrariumBot:
@@ -18,7 +18,8 @@ class TerrariumBot:
         nick: str,
         channels: List[str],
         database: Database,
-        llm_client: LLMClient,
+        llm_client: AgentClient,
+        context_manager: ContextManager,
         use_ssl: bool = False,
         command_prefix: str = "."
     ):
@@ -31,7 +32,8 @@ class TerrariumBot:
             nick: Bot nickname
             channels: List of channels to join
             database: Database instance
-            llm_client: LLM client instance
+            llm_client: Agent client instance
+            context_manager: Context manager instance
             use_ssl: Use SSL/TLS connection
             command_prefix: Command prefix (default: '.')
         """
@@ -41,6 +43,7 @@ class TerrariumBot:
         self.channels = channels
         self.database = database
         self.llm_client = llm_client
+        self.context_manager = context_manager
         self.use_ssl = use_ssl
         self.command_prefix = command_prefix
 

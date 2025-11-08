@@ -56,6 +56,17 @@ class Database:
             )
         """)
 
+        # Conversation history for AI context persistence
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL
+            )
+        """)
+
         # Create indexes for performance
         # Composite index for the most common query: recent messages by channel
         await self.db.execute("""
@@ -79,6 +90,12 @@ class Database:
         await self.db.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_type
             ON messages(message_type)
+        """)
+
+        # Index for conversation history queries by channel
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_conversation_channel_timestamp
+            ON conversation_history(channel, timestamp ASC)
         """)
 
         await self.db.commit()
@@ -244,6 +261,63 @@ class Database:
                 'first_message': row[2],
                 'last_message': row[3]
             }
+
+    async def save_conversation_turn(
+        self,
+        channel: str,
+        role: str,
+        content: str
+    ):
+        """
+        Save a conversation turn to history.
+
+        Args:
+            channel: IRC channel
+            role: 'user', 'assistant', or 'system'
+            content: Message content
+        """
+        await self.db.execute("""
+            INSERT INTO conversation_history (channel, role, content)
+            VALUES (?, ?, ?)
+        """, (channel, role, content))
+        await self.db.commit()
+
+    async def get_conversation_history(
+        self,
+        channel: str
+    ) -> List[dict]:
+        """
+        Get full conversation history for a channel.
+
+        Args:
+            channel: IRC channel
+
+        Returns:
+            List of conversation turns in chronological order
+        """
+        async with self.db.execute("""
+            SELECT timestamp, role, content
+            FROM conversation_history
+            WHERE channel = ?
+            ORDER BY timestamp ASC
+        """, (channel,)) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "timestamp": datetime.fromisoformat(row[0]) if row[0] else None,
+                    "role": row[1],
+                    "content": row[2]
+                }
+                for row in rows
+            ]
+
+    async def clear_conversation_history(self, channel: str):
+        """Clear conversation history for a channel."""
+        await self.db.execute("""
+            DELETE FROM conversation_history
+            WHERE channel = ?
+        """, (channel,))
+        await self.db.commit()
 
     async def close(self):
         """Close database connection."""

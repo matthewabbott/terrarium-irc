@@ -89,7 +89,7 @@ class CommandHandler:
 
     @staticmethod
     async def cmd_terrarium(bot: 'TerrariumBot', channel: str, nick: str, args: str):
-        """Ask the LLM with IRC context."""
+        """Ask the LLM with persistent conversation context."""
         if not args:
             bot.send_message(
                 channel,
@@ -98,48 +98,36 @@ class CommandHandler:
             return
 
         # Send thinking message
-        bot.send_message(channel, f"{nick}: Analyzing context...")
+        bot.send_message(channel, f"{nick}: Thinking...")
 
         try:
-            # Get recent context
-            context = await bot.get_recent_context(channel, limit=50)
+            # Get channel context
+            context = await bot.context_manager.get_context(channel)
 
-            # Check if query might need search
-            search_keywords = ['when', 'who said', 'did someone', 'find', 'search']
-            needs_search = any(keyword in args.lower() for keyword in search_keywords)
+            # Build message list for API
+            messages = await context.get_messages_for_api()
 
-            if needs_search:
-                # Try to extract search terms and search
-                search_terms = args.lower()
-                for keyword in search_keywords:
-                    search_terms = search_terms.replace(keyword, '')
-                search_terms = search_terms.strip()
+            # Add current user message
+            await context.add_user_message(nick, args)
 
-                if search_terms:
-                    search_results = await bot.database.search_messages(
-                        query=search_terms,
-                        channel=channel,
-                        limit=20
-                    )
-                    if search_results:
-                        search_context = bot.context_builder.build_search_context(
-                            search_results,
-                            search_terms
-                        )
-                        context += "\n\n" + search_context
+            # Append to messages for this request
+            messages.append({
+                "role": "user",
+                "content": f"{nick}: {args}"
+            })
 
-            # Generate response with context
-            system_prompt = bot.context_builder.build_system_prompt(channel)
-            response = await bot.llm_client.generate(
-                prompt=args,
-                system_prompt=system_prompt,
-                context=context
+            # Get response from agent
+            response = await bot.llm_client.chat(
+                messages=messages,
+                temperature=0.8,
+                max_tokens=512
             )
 
-            # Split into IRC-friendly chunks
-            chunks = bot.context_builder.split_long_response(response, max_length=400)
+            # Add to conversation history
+            await context.add_assistant_message(response)
 
-            # Send response
+            # Send to IRC (split if needed)
+            chunks = bot.context_builder.split_long_response(response, max_length=400)
             for i, chunk in enumerate(chunks):
                 if i == 0:
                     bot.send_message(channel, f"{nick}: {chunk}")

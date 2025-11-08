@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from bot import TerrariumBot, CommandHandler
 from storage import Database
-from llm import AgentClient
+from llm import AgentClient, ContextManager
 
 
 async def main():
@@ -53,6 +53,11 @@ async def main():
     await database.connect()
     print("Database ready.")
 
+    # Initialize Context Manager
+    print("\nInitializing context manager...")
+    context_manager = ContextManager(database)
+    print("Context manager ready.")
+
     # Initialize Agent client
     print(f"\nInitializing Agent client...")
     agent_client = AgentClient(
@@ -80,7 +85,8 @@ async def main():
         nick=irc_nick,
         channels=irc_channels,
         database=database,
-        llm_client=agent_client,  # Using agent_client with llm_client parameter name for compatibility
+        llm_client=agent_client,
+        context_manager=context_manager,
         use_ssl=irc_use_ssl,
         command_prefix=command_prefix
     )
