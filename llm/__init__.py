@@ -1,6 +1,6 @@
 """LLM integration layer."""
 
-from .client import LLMClient
+from .agent_client import AgentClient
 from .context import ContextBuilder
 
-__all__ = ['LLMClient', 'ContextBuilder']
+__all__ = ['AgentClient', 'ContextBuilder']

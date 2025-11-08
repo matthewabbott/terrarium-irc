@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from bot import TerrariumBot, CommandHandler
 from storage import Database
-from llm import LLMClient
+from llm import AgentClient
 
 
 async def main():
@@ -25,11 +25,10 @@ async def main():
     irc_channels = os.getenv('IRC_CHANNELS', '#test').split(',')
     irc_channels = [ch.strip() for ch in irc_channels]
 
-    # LLM Configuration
-    llm_model = os.getenv('LLM_MODEL', 'qwen2.5:7b')
-    llm_api_url = os.getenv('LLM_API_URL', 'http://localhost:11434')
-    llm_temperature = float(os.getenv('LLM_TEMPERATURE', '0.7'))
-    llm_max_tokens = int(os.getenv('LLM_MAX_TOKENS', '1000'))
+    # Agent Configuration
+    agent_api_url = os.getenv('AGENT_API_URL', 'http://localhost:8080')
+    agent_temperature = float(os.getenv('AGENT_TEMPERATURE', '0.8'))
+    agent_max_tokens = int(os.getenv('AGENT_MAX_TOKENS', '512'))
 
     # Bot Configuration
     command_prefix = os.getenv('COMMAND_PREFIX', '.')
@@ -44,7 +43,7 @@ async def main():
     print(f"Server: {irc_server}:{irc_port} (SSL: {irc_use_ssl})")
     print(f"Nick: {irc_nick}")
     print(f"Channels: {', '.join(irc_channels)}")
-    print(f"LLM: Ollama ({llm_model})")
+    print(f"Agent: {agent_api_url}")
     print(f"Database: {db_path}")
     print("="*60)
 
@@ -54,22 +53,25 @@ async def main():
     await database.connect()
     print("Database ready.")
 
-    # Initialize LLM client
-    print(f"\nInitializing LLM client (Ollama)...")
-    llm_client = LLMClient(
-        model=llm_model,
-        api_url=llm_api_url,
-        temperature=llm_temperature,
-        max_tokens=llm_max_tokens
+    # Initialize Agent client
+    print(f"\nInitializing Agent client...")
+    agent_client = AgentClient(
+        base_url=agent_api_url,
+        timeout=60
     )
 
     try:
-        await llm_client.initialize()
-        print("LLM client ready.")
+        await agent_client.initialize()
+        if await agent_client.health_check():
+            print("✓ Agent server is healthy")
+        else:
+            print("⚠ Agent server not responding")
+            print("  LLM commands will be unavailable")
     except Exception as e:
-        print(f"Warning: Failed to initialize LLM client: {e}")
-        print("Bot will run but LLM commands may fail.")
-        print("Make sure Ollama is installed and running.")
+        print(f"⚠ Failed to connect to agent: {e}")
+        print("  Bot will run but LLM commands will fail")
+        print("  Make sure terrarium-agent is running:")
+        print("  http://localhost:8080")
 
     # Create bot instance
     bot = TerrariumBot(
@@ -78,7 +80,7 @@ async def main():
         nick=irc_nick,
         channels=irc_channels,
         database=database,
-        llm_client=llm_client,
+        llm_client=agent_client,  # Using agent_client with llm_client parameter name for compatibility
         use_ssl=irc_use_ssl,
         command_prefix=command_prefix
     )
