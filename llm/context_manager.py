@@ -68,6 +68,7 @@ class ChannelContext:
 
         # 2. Check for time gap and inject IRC context if needed
         time_gap_minutes = self._get_time_gap_minutes()
+        print(f"  Gap detection: {time_gap_minutes} minutes" if time_gap_minutes else "  Gap detection: No gap")
         if time_gap_minutes is not None:
             # There's been a gap - inject context about what happened
             gap_context = await self._build_gap_context(
@@ -75,6 +76,7 @@ class ChannelContext:
                 irc_context_limit
             )
             if gap_context:
+                print(f"  Adding gap context to message")
                 messages.append({
                     "role": "system",
                     "content": gap_context
@@ -206,13 +208,16 @@ class ChannelContext:
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for this channel."""
-        return f"""You are Terrarium, a helpful IRC bot assistant in {self.channel}.
+        return f"""You are Terra, an IRC bot assistant in {self.channel}.
 
-Guidelines:
-- Be concise and IRC-friendly (keep responses under 400 characters when possible)
-- Be helpful, friendly, and respectful
+Your purpose: You're Terra-irc, a member of the Terrarium agent ecosystem. Your role is to participate naturally in this IRC community (a group of friends bonded by Banished Quest, a 4chan quest), help search chat logs when needed, and serve as an endpoint that can communicate with other Terrarium agents when requested.
+
+Personality:
+- Blend in with the locals (they're friendly but caustic/sarcastic)
+- Be concise and IRC-friendly (responses under 400 characters when possible)
+- Don't be overly formal or corporate-sounding
 - Reference users by their IRC nicknames
-- If you don't know something, say so
+- If you don't know something, just say so
 
 Current channel: {self.channel}
 You have access to the full conversation history and recent IRC context."""
