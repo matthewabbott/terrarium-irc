@@ -1,11 +1,10 @@
 """
 Context management for per-channel AI conversations.
 
-Manages conversation history persistence and intelligent context injection.
+Simplified: Shows recent IRC activity with timestamps.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict
 from storage import Database
 
 
@@ -22,42 +21,20 @@ class ChannelContext:
         """
         self.channel = channel
         self.db = db
-        self.conversation_history: List[Dict[str, str]] = []
-        self.last_activity: Optional[datetime] = None
-        self._loaded = False
-
-    async def load(self):
-        """Load conversation history from database."""
-        if self._loaded:
-            return
-
-        history = await self.db.get_conversation_history(self.channel)
-
-        # Convert DB format to OpenAI format
-        self.conversation_history = [
-            {"role": turn["role"], "content": turn["content"]}
-            for turn in history
-        ]
-
-        # Set last activity from most recent turn
-        if history:
-            self.last_activity = history[-1]["timestamp"]
-
-        self._loaded = True
-        print(f"  Loaded {len(self.conversation_history)} turns for {self.channel}")
 
     async def get_messages_for_api(
         self,
-        irc_context_limit: int = 30
+        irc_context_limit: int = 50
     ) -> List[Dict[str, str]]:
         """
         Build message list for API call.
 
+        Simplified approach: Show recent IRC channel activity with timestamps.
+        The timestamps naturally show gaps - no complex gap detection needed.
+
         Returns:
             List of messages in OpenAI format
         """
-        await self.load()
-
         messages = []
 
         # 1. System prompt
@@ -66,210 +43,40 @@ class ChannelContext:
             "content": self._build_system_prompt()
         })
 
-        # 2. Full conversation history (all of it!)
-        messages.extend(self.conversation_history)
+        # 2. Get recent IRC channel messages (last N messages from everyone)
+        recent_irc = await self.db.get_recent_messages(
+            channel=self.channel,
+            limit=irc_context_limit,
+            message_types=None  # Include all types (PRIVMSG, JOIN, PART, etc.)
+        )
 
-        # 3. Check for time gap and inject IRC context if needed
-        # NOTE: We add this AFTER conversation history so it appears more recently
-        time_gap_minutes = self._get_time_gap_minutes()
-        print(f"  Gap detection: {time_gap_minutes} minutes" if time_gap_minutes else "  Gap detection: No gap")
-        if time_gap_minutes is not None:
-            # There's been a gap - inject context about what happened
-            gap_context = await self._build_gap_context(
-                time_gap_minutes,
-                irc_context_limit
-            )
-            if gap_context:
-                print(f"  Adding gap context to message")
-                messages.append({
-                    "role": "system",
-                    "content": gap_context
-                })
+        # 3. Format as context for the AI
+        if recent_irc:
+            context_lines = ["Recent IRC activity in this channel:\n"]
+            for msg in recent_irc:
+                time_str = msg.timestamp.strftime('%H:%M')
+                if msg.message_type == 'PRIVMSG':
+                    context_lines.append(f"[{time_str}] <{msg.nick}> {msg.message}")
+                elif msg.message_type == 'JOIN':
+                    context_lines.append(f"[{time_str}] * {msg.nick} joined")
+                elif msg.message_type == 'PART':
+                    context_lines.append(f"[{time_str}] * {msg.nick} left")
+                elif msg.message_type == 'QUIT':
+                    context_lines.append(f"[{time_str}] * {msg.nick} quit")
 
-                # Save a marker to conversation history so AI remembers the gap occurred
-                # This prevents "amnesia" where the AI sees the gap message once then forgets
-                await self._save_gap_marker(time_gap_minutes)
+            messages.append({
+                "role": "system",
+                "content": "\n".join(context_lines)
+            })
 
         return messages
 
-    async def add_user_message(self, nick: str, message: str):
-        """
-        Add user message to conversation.
-
-        Args:
-            nick: IRC nickname
-            message: Message content
-        """
-        # Add timestamp to all messages for AI context
-        timestamp = datetime.now()
-        time_str = timestamp.strftime('%H:%M')
-        content = f"[{time_str}] <{nick}> {message}"
-
-        self.conversation_history.append({
-            "role": "user",
-            "content": content
-        })
-
-        # Save to database
-        await self.db.save_conversation_turn(
-            channel=self.channel,
-            role="user",
-            content=content
-        )
-
-        self.last_activity = timestamp
-
-    async def add_assistant_message(self, message: str):
-        """
-        Add assistant response to conversation.
-
-        Args:
-            message: Response content
-        """
-        # Add timestamp to assistant messages, but don't include username
-        # (AI knows assistant messages are from Terra, no need to show it)
-        # This prevents Terra from mimicking the <Terra> format in responses
-        timestamp = datetime.now()
-        time_str = timestamp.strftime('%H:%M')
-        content = f"[{time_str}] {message}"
-
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": content
-        })
-
-        # Save to database
-        await self.db.save_conversation_turn(
-            channel=self.channel,
-            role="assistant",
-            content=content
-        )
-
-        self.last_activity = timestamp
-
-    async def clear(self):
-        """Clear conversation history."""
-        self.conversation_history = []
-        self.last_activity = None
-        await self.db.clear_conversation_history(self.channel)
-        print(f"  Cleared conversation history for {self.channel}")
-
-    async def _save_gap_marker(self, gap_minutes: int):
-        """
-        Save a marker in conversation history that a gap occurred.
-
-        This ensures the AI remembers the gap in future turns, preventing
-        "amnesia" where it sees the gap message once then forgets.
-
-        Args:
-            gap_minutes: Length of gap in minutes
-        """
-        timestamp = datetime.now()
-        time_str = timestamp.strftime('%H:%M')
-
-        if gap_minutes < 60:
-            marker = f"[{time_str}] [System: Resuming after {gap_minutes} minute gap]"
-        else:
-            hours = gap_minutes / 60
-            marker = f"[{time_str}] [System: Resuming after {hours:.1f} hour gap]"
-
-        # Add to in-memory history as a user message (so it appears in conversation flow)
-        self.conversation_history.append({
-            "role": "user",
-            "content": marker
-        })
-
-        # Save to database
-        await self.db.save_conversation_turn(
-            channel=self.channel,
-            role="user",
-            content=marker
-        )
-
-    def _get_time_gap_minutes(self) -> Optional[int]:
-        """
-        Calculate time gap since last activity.
-
-        Returns:
-            Minutes since last activity, or None if no gap (< 5 min)
-        """
-        if not self.last_activity:
-            # First interaction ever - no gap
-            return None
-
-        elapsed = datetime.now() - self.last_activity
-        minutes = int(elapsed.total_seconds() / 60)
-
-        # Only report gaps >= 5 minutes
-        if minutes >= 5:
-            return minutes
-        else:
-            return None
-
-    async def _build_gap_context(
-        self,
-        gap_minutes: int,
-        irc_limit: int
-    ) -> Optional[str]:
-        """
-        Build context message about what happened during the gap.
-
-        Args:
-            gap_minutes: Length of gap in minutes
-            irc_limit: Max IRC messages to include
-
-        Returns:
-            Context string or None
-        """
-        # Get IRC messages since last activity (including system messages like JOIN/PART)
-        hours = max(1, gap_minutes // 60 + 1)
-        recent_irc = await self.db.get_recent_messages(
-            channel=self.channel,
-            limit=irc_limit,
-            hours=hours,
-            message_types=None  # Include all message types (PRIVMSG, JOIN, PART, etc.)
-        )
-
-        if not recent_irc:
-            # No IRC activity during gap
-            if gap_minutes < 60:
-                return f"IMPORTANT: {gap_minutes} minutes have passed since your last response. There was no IRC activity during this time."
-            else:
-                hours_gap = gap_minutes / 60
-                return f"IMPORTANT: {hours_gap:.1f} hours have passed since your last response. There was no IRC activity during this time."
-
-        # Build context with IRC activity
-        lines = []
-
-        if gap_minutes < 60:
-            lines.append(f"IMPORTANT: {gap_minutes} minutes have passed since your last response.")
-            lines.append(f"Here are the {len(recent_irc)} IRC messages that occurred during this gap:\n")
-        else:
-            hours_gap = gap_minutes / 60
-            lines.append(f"IMPORTANT: {hours_gap:.1f} hours have passed since your last response.")
-            lines.append(f"Here are the {len(recent_irc)} IRC messages that occurred during this gap:\n")
-        for msg in recent_irc:
-            time_str = msg.timestamp.strftime('%H:%M')
-            # Format based on message type
-            if msg.message_type == 'PRIVMSG':
-                lines.append(f"[{time_str}] <{msg.nick}> {msg.message}")
-            elif msg.message_type == 'JOIN':
-                lines.append(f"[{time_str}] * {msg.nick} joined {self.channel}")
-            elif msg.message_type == 'PART':
-                lines.append(f"[{time_str}] * {msg.nick} left {self.channel}")
-            elif msg.message_type == 'QUIT':
-                lines.append(f"[{time_str}] * {msg.nick} quit ({msg.message})")
-            else:
-                # Other message types - show as-is
-                lines.append(f"[{time_str}] * {msg.message_type}: {msg.message}")
-
-        return "\n".join(lines)
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for this channel."""
         return f"""You are Terra, an IRC bot assistant in {self.channel}.
 
-Your purpose: You're Terra-irc, a member of the Terrarium agent ecosystem. Your role is to participate naturally in this IRC community (a group of friends bonded by Banished Quest, a 4chan quest), help search chat logs when needed, and serve as an endpoint that can communicate with other Terrarium agents when requested.
+Your purpose: You're Terra-irc, a member of the Terrarium agent ecosystem. Your role is to participate naturally in this IRC community (which was originally about Banished Quest, an interactive story posted on 4chan, but now isn't about much of anything), help search chat logs when needed, and serve as an endpoint that can communicate with other Terrarium agents when requested.
 
 Personality:
 - Blend in with the locals (they're friendly but caustic/sarcastic)
@@ -278,8 +85,7 @@ Personality:
 - Reference users by their IRC nicknames
 - If you don't know something, just say so
 
-Current channel: {self.channel}
-You have access to the full conversation history and recent IRC context."""
+You will see recent IRC activity with timestamps. The message starting with !terrarium is directed at you and you should respond to it."""
 
 
 class ContextManager:
@@ -307,16 +113,5 @@ class ContextManager:
         """
         if channel not in self.contexts:
             self.contexts[channel] = ChannelContext(channel, self.db)
-            await self.contexts[channel].load()
 
         return self.contexts[channel]
-
-    async def clear_channel(self, channel: str):
-        """
-        Clear context for a channel.
-
-        Args:
-            channel: IRC channel name
-        """
-        if channel in self.contexts:
-            await self.contexts[channel].clear()

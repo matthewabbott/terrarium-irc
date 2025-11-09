@@ -104,19 +104,15 @@ class CommandHandler:
             # Get channel context
             context = await bot.context_manager.get_context(channel)
 
-            # Build message list for API
+            # Build message list for API (includes recent IRC activity)
             messages = await context.get_messages_for_api()
 
-            # Add current user message (with timestamp formatting)
+            # Add current user message (the !terrarium command they just sent)
             from datetime import datetime
             timestamp = datetime.now()
             time_str = timestamp.strftime('%H:%M')
-            user_content = f"[{time_str}] <{nick}> {args}"
+            user_content = f"[{time_str}] <{nick}> !terrarium {args}"
 
-            # Save to conversation history
-            await context.add_user_message(nick, args)
-
-            # Append to messages for this request (matching the format we saved)
             messages.append({
                 "role": "user",
                 "content": user_content
@@ -160,9 +156,6 @@ class CommandHandler:
             print(f"=== CLEANED RESPONSE (after stripping <think> and timestamps) ===")
             print(f"{response_cleaned}")
             print(f"=== END CLEANED RESPONSE ===\n")
-
-            # Add to conversation history (save cleaned response)
-            await context.add_assistant_message(response_cleaned)
 
             # Send to IRC (split if needed, use cleaned response)
             chunks = bot.context_builder.split_long_response(response_cleaned, max_length=400)
