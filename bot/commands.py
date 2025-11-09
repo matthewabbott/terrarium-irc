@@ -18,7 +18,8 @@ class CommandHandler:
         'ask': 'Ask the LLM a question without IRC context',
         'terrarium': 'Ask the LLM with full IRC channel context',
         'search': 'Search message history (!search [user:nick] [hours:N] word1 word2 OR "exact phrase" OR word1+word2)',
-        'stats': 'Show channel statistics (messages, users, etc.)'
+        'stats': 'Show channel statistics (messages, users, etc.)',
+        'clear': 'Clear Terra\'s conversation memory for this channel'
     }
 
     @staticmethod
@@ -30,6 +31,7 @@ class CommandHandler:
         bot.register_command('search', CommandHandler.cmd_search)
         bot.register_command('stats', CommandHandler.cmd_stats)
         bot.register_command('who', CommandHandler.cmd_who)
+        bot.register_command('clear', CommandHandler.cmd_clear)
         bot.register_command('ping', CommandHandler.cmd_ping)
 
     @staticmethod
@@ -106,15 +108,16 @@ class CommandHandler:
             # Get channel context
             context = await bot.context_manager.get_context(channel)
 
-            # Build message list for API (includes recent IRC activity)
+            # Build message list for API (includes recent IRC activity + conversation history)
             messages = await context.get_messages_for_api()
 
-            # Add current user message (the !terrarium command they just sent)
-            from datetime import datetime
-            timestamp = datetime.now()
-            time_str = timestamp.strftime('%H:%M')
-            user_content = f"[{time_str}] <{nick}> !terrarium {args}"
+            # Add current user message - CLEAN (no timestamps, just the content)
+            user_content = args  # Just the question, no decorations
 
+            # Save to conversation history
+            await context.add_user_message(user_content)
+
+            # Add to messages for this request
             messages.append({
                 "role": "user",
                 "content": user_content
@@ -163,7 +166,10 @@ class CommandHandler:
                 if "tool_calls" in response_message and response_message["tool_calls"]:
                     print(f"  AI wants to call {len(response_message['tool_calls'])} tool(s)")
 
-                    # Add assistant message with tool calls to conversation
+                    # Save assistant message with tool calls to conversation history
+                    await context.add_tool_call_message(response_message)
+
+                    # Add to messages array for this request
                     messages.append(response_message)
 
                     # Execute each tool call
@@ -185,13 +191,19 @@ class CommandHandler:
                             channel=channel
                         )
 
-                        # Add tool result to messages
-                        messages.append({
+                        # Build tool result message
+                        tool_result_message = {
                             "role": "tool",
                             "tool_call_id": tool_id,
                             "name": tool_name,
                             "content": tool_result
-                        })
+                        }
+
+                        # Save to conversation history
+                        await context.add_tool_result(tool_result_message)
+
+                        # Add to messages array for this request
+                        messages.append(tool_result_message)
 
                         print(f"  Tool result added to conversation")
 
@@ -209,6 +221,9 @@ class CommandHandler:
             print(f"\n=== RAW RESPONSE FROM API ===")
             print(f"{final_response}")
             print(f"=== END RAW RESPONSE ===\n")
+
+            # Save to conversation history (WITH thinking tags - they're part of Terra's memory)
+            await context.add_assistant_message(final_response)
 
             # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
             import re
@@ -366,5 +381,14 @@ class CommandHandler:
                 users_str = ', '.join(users[:50])
                 bot.send_message(channel, f"{nick}: {count} users in {channel} (showing first 50): {users_str}")
 
+        except Exception as e:
+            bot.send_message(channel, f"{nick}: Error: {str(e)}")
+
+    @staticmethod
+    async def cmd_clear(bot: 'TerrariumBot', channel: str, nick: str, args: str):
+        """Clear Terra's conversation memory for this channel."""
+        try:
+            await bot.context_manager.clear_channel(channel)
+            bot.send_message(channel, f"{nick}: Conversation memory cleared for {channel}")
         except Exception as e:
             bot.send_message(channel, f"{nick}: Error: {str(e)}")
