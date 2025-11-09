@@ -518,6 +518,22 @@ if "search" in response.lower() or "need more context" in response.lower():
 
 ---
 
+### Enhancement Request Tools (New)
+
+Terrarium can now capture her own enhancement ideas via three helper tools:
+
+1. `create_enhancement_request(title, summary)`  
+   - Writes a markdown file to `data/enhancements/` with the summary plus the last ~20 IRC messages for context  
+   - Limited to 10 open files to keep requests actionable
+
+2. `list_enhancement_requests()`  
+   - Returns filenames, titles, and timestamps of existing requests
+
+3. `read_enhancement_request(filename)`  
+   - Reads the content of a specific request so Terra can reference or update it
+
+These tools give Terra a lightweight backlog she can maintain without human intervention, and they provide engineers with ready-made reproduction context when they pick up the work.
+
 ## API Integration
 
 ### terrarium-agent Client

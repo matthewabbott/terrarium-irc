@@ -387,17 +387,58 @@ class Database:
         """, (channel, nick))
         await self.db.commit()
 
-    async def remove_user_from_all_channels(self, nick: str):
+    async def remove_user_from_all_channels(self, nick: str) -> List[str]:
         """
         Remove user from all channels (on QUIT).
 
         Args:
             nick: User nickname
         """
+        cursor = await self.db.execute("""
+            SELECT channel FROM channel_users
+            WHERE nick = ?
+        """, (nick,))
+        rows = await cursor.fetchall()
+        channels = [row[0] for row in rows]
+
         await self.db.execute("""
             DELETE FROM channel_users
             WHERE nick = ?
         """, (nick,))
+        await self.db.commit()
+        return channels
+
+    async def get_channels_for_user(self, nick: str) -> List[str]:
+        """
+        Get all channels a user is currently in.
+
+        Args:
+            nick: User nickname
+
+        Returns:
+            List of channel names
+        """
+        cursor = await self.db.execute("""
+            SELECT channel FROM channel_users
+            WHERE nick = ?
+            ORDER BY channel
+        """, (nick,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+    async def rename_user_in_channels(self, old_nick: str, new_nick: str):
+        """
+        Update channel user tracking when a nick changes.
+
+        Args:
+            old_nick: Previous nickname
+            new_nick: New nickname
+        """
+        await self.db.execute("""
+            UPDATE channel_users
+            SET nick = ?
+            WHERE nick = ?
+        """, (new_nick, old_nick))
         await self.db.commit()
 
     async def get_channel_users(self, channel: str) -> List[str]:

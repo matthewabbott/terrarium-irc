@@ -1,12 +1,12 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`main.py` boots the IRC bot and wires the three core packages: `bot/` (MiniIRC event loop plus per-command handlers), `llm/` (terrarium-agent client, context management, and tool execution), and `storage/` (SQLite models and helpers that persist to `data/irc_logs.db`). Configuration lives in `.env` or `.env.example`, while service scripts (`setup.sh`, `setup_ollama.sh`, `terrarium-irc.service`) automate deployment. Keep generated artifacts inside `data/` or `storage/`—source files should stay importable from the repo root.
+`main.py` boots the IRC bot and wires the three core packages: `bot/` (MiniIRC event loop plus per-command handlers), `llm/` (terrarium-agent client, context management, and tool execution), and `storage/` (SQLite models and helpers that persist to `data/irc_logs.db`). Configuration lives in `.env` or `.env.example`, while service scripts (`setup.sh`, `setup_ollama.sh`, `terrarium-irc.service`) automate deployment. Keep generated artifacts inside `data/` or `storage/`—source files should stay importable from the repo root. Terra also writes enhancement markdowns to `data/enhancements/` via a tool call; check that directory into backups but keep it out of version control (already gitignored).
 
 ## Build, Test, and Development Commands
 - `python3 -m venv venv && source venv/bin/activate` — create and enter the virtual environment used by all scripts.
 - `pip install -r requirements.txt` (or `./setup.sh`) — install MiniIRC, aiosqlite, and supporting libraries.
-- `terrarium-agent serve --port 8080` — start the local LLM service the bot calls for `!terrarium`.
+- `terrarium-agent serve --port 8080` — start the local LLM service the bot calls for `!terrarium` / `!ask`.
 - `python main.py` — run the bot; reads `./.env` and logs into channels listed in `IRC_CHANNELS`.
 - `python -m pytest tests` — run the pytest suite; focus on async command handlers and storage logic.
 

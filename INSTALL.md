@@ -147,6 +147,7 @@ Join the channel(s) with your IRC client and test:
 ```
 !ping
 !help
+!ask Is this thing working?
 !terrarium What are we talking about?
 !who
 ```

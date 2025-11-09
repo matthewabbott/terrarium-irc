@@ -184,7 +184,7 @@ Commands are registered in `CommandHandler.register_all()` and routed by `Terrar
 **Available Commands**:
 - `!help [command]` - Show all commands or help for specific command
 - `!ping` - Bot health check
-- `!terrarium <question>` - Query Terra with persistent conversation context
+- `!terrarium <question>` / `!ask <question>` - Query Terra with persistent conversation context
 - `!search <term>` - Search message history
 - `!stats` - Show channel statistics
 - `!who` - Show users currently in channel
@@ -201,6 +201,15 @@ Responses are split into IRC-friendly chunks by `ContextBuilder.split_long_respo
 - Max 400 characters per message
 - Splits by sentences first, then words if needed
 - Avoids flooding with 0.5s delay between chunks
+
+## Enhancement Requests
+
+Terra has three tools for tracking her own wish-list:
+- `create_enhancement_request(title, summary)` — writes a markdown file (with the last ~20 IRC messages) to `data/enhancements/` and is capped at 10 concurrent files
+- `list_enhancement_requests()` — enumerates the existing markdown files
+- `read_enhancement_request(filename)` — returns the contents of a specific file
+
+These files are gitignored but should be backed up with the rest of `data/`. When editing tooling or prompts, keep the limit logic (`ToolExecutor.MAX_ENHANCEMENTS`) in mind.
 
 ## Common Development Patterns
 

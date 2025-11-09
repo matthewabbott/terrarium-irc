@@ -9,7 +9,8 @@ An IRC bot with local LLM integration for the NVIDIA DGX Spark. Logs IRC convers
 - **Persistent Conversations**: Terra maintains conversation memory across requests
 - **Tool Calling**: Terra can search chat history and get user lists
 - **Dual-Context Architecture**: Separates IRC logs from conversation memory
-- **Commands**: `!help`, `!ping`, `!terrarium`, `!search`, `!stats`, `!who`, `!clear`
+- **Self-Service Enhancements**: Terra can file enhancement requests (`data/enhancements/*.md`) with recent chat context
+- **Commands**: `!help`, `!ping`, `!terrarium`/`!ask`, `!search`, `!stats`, `!who`, `!clear`
 
 ## Quick Start
 
@@ -65,7 +66,7 @@ source venv/bin/activate
 python main.py
 ```
 
-**Note**: The bot will log IRC messages and respond to `!ping`, `!help`, `!search`, `!stats`, `!who` even without terrarium-agent. The `!terrarium` LLM command requires terrarium-agent server running.
+**Note**: The bot will log IRC messages and respond to `!ping`, `!help`, `!search`, `!stats`, `!who` even without terrarium-agent. The `!terrarium`/`!ask` LLM commands require terrarium-agent server running.
 
 ## Commands
 
@@ -79,7 +80,7 @@ In IRC:
 - `!who` - Show users currently in channel
 
 **Requires terrarium-agent:**
-- `!terrarium <question>` - Ask Terra with persistent conversation context
+- `!terrarium <question>` / `!ask <question>` - Ask Terra with persistent conversation context
 - `!clear` - Clear Terra's conversation memory for this channel
 
 ## Project Structure
@@ -121,7 +122,7 @@ See `.env.example` for all options. Key settings:
 - Verify you're in project directory
 - Reinstall: `pip install -r requirements.txt`
 
-**LLM command fails (!terrarium):**
+**LLM command fails (!terrarium / !ask):**
 - The bot works without terrarium-agent (just won't have AI features)
 - To enable AI responses: Start terrarium-agent HTTP server
 - Check server is running: `curl http://localhost:8080/health`
@@ -132,8 +133,8 @@ See `.env.example` for all options. Key settings:
 1. **IRC Connection**: Bot connects and joins configured channels
 2. **Message Logging**: All messages stored in SQLite (`./data/irc_logs.db`)
 3. **Command Detection**: Messages starting with `!` trigger commands
-4. **LLM Integration**: `!terrarium` sends requests to terrarium-agent HTTP server
-5. **Dual-Context Architecture**: `!terrarium` provides:
+4. **LLM Integration**: `!terrarium`/`!ask` send requests to terrarium-agent HTTP server
+5. **Dual-Context Architecture**: `!terrarium`/`!ask` provide:
    - **IRC Logs**: Recent channel activity with timestamps (decorated)
    - **Conversation Memory**: Terra's persistent conversation history (clean)
 6. **Tool Calling**: Terra can call tools like `search_chat_logs` and `get_current_users`
@@ -142,6 +143,10 @@ See `.env.example` for all options. Key settings:
 ## Development
 
 See [PYTHON_SETUP.md](PYTHON_SETUP.md) for Python environment best practices.
+
+## Enhancement Requests
+
+Terra can capture her own improvement ideas by calling the `create_enhancement_request` tool (available via `!terrarium` / `!ask`). Each request writes a markdown file under `data/enhancements/` containing her summary plus the last ~20 IRC messages for context. The directory is capped at 10 open files; she can review them with the `list_enhancement_requests` and `read_enhancement_request` tools. Check this folder periodically to see what the bot has asked for.
 
 ## Future Plans
 

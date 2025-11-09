@@ -154,14 +154,41 @@ class TerrariumBot:
 
             print(f"  {nick} quit ({reason})")
 
-            # Remove user from all channel tracking
-            asyncio.run_coroutine_threadsafe(
-                self.database.remove_user_from_all_channels(nick),
-                self.loop
-            )
+            async def process_quit():
+                channels = await self.database.remove_user_from_all_channels(nick)
+                for channel in channels:
+                    await self._log_event(
+                        channel=channel,
+                        nick=nick,
+                        user=hostmask[1],
+                        host=hostmask[2],
+                        message=reason,
+                        message_type="QUIT"
+                    )
 
-            # Note: QUIT events aren't channel-specific, so we don't log them to messages table
-            # They're already captured in the channel_users removal
+            asyncio.run_coroutine_threadsafe(process_quit(), self.loop)
+
+        @self.irc.Handler("NICK", colon=False)
+        def handle_nick_change(irc, hostmask, args):
+            old_nick = hostmask[0]
+            new_nick = args[0]
+
+            print(f"  {old_nick} is now known as {new_nick}")
+
+            async def process_nick():
+                channels = await self.database.get_channels_for_user(old_nick)
+                await self.database.rename_user_in_channels(old_nick, new_nick)
+                for channel in channels:
+                    await self._log_event(
+                        channel=channel,
+                        nick=old_nick,
+                        user=hostmask[1],
+                        host=hostmask[2],
+                        message_type="NICK",
+                        message=new_nick
+                    )
+
+            asyncio.run_coroutine_threadsafe(process_nick(), self.loop)
 
         @self.irc.Handler("353", colon=False)  # RPL_NAMREPLY
         def handle_names(irc, hostmask, args):

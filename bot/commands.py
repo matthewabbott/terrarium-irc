@@ -6,7 +6,13 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
-FALLBACK_TOOL_NAMES = {"search_chat_logs", "get_current_users"}
+FALLBACK_TOOL_NAMES = {
+    "search_chat_logs",
+    "get_current_users",
+    "create_enhancement_request",
+    "list_enhancement_requests",
+    "read_enhancement_request"
+}
 _TOOL_RESULT_PATTERN = re.compile(
     r"<tool_result[^>]*>\s*(?P<body>.*?)\s*</tool_result>",
     re.IGNORECASE | re.DOTALL
@@ -86,6 +92,7 @@ class CommandHandler:
         'help': 'Show available commands or get help for a specific command',
         'ping': 'Check if the bot is responsive',
         'terrarium': 'Ask Terra with full IRC channel context and tool access',
+        'ask': 'Alias for !terrarium (same behavior, same context + tools)',
         'search': 'Search message history (!search [user:nick] [hours:N] word1 word2 OR "exact phrase" OR word1+word2)',
         'stats': 'Show channel statistics (messages, users, etc.)',
         'who': 'List the users currently in channel',
@@ -97,6 +104,7 @@ class CommandHandler:
         """Register all commands with the bot."""
         bot.register_command('help', CommandHandler.cmd_help)
         bot.register_command('terrarium', CommandHandler.cmd_terrarium)
+        bot.register_command('ask', CommandHandler.cmd_terrarium)
         bot.register_command('search', CommandHandler.cmd_search)
         bot.register_command('stats', CommandHandler.cmd_stats)
         bot.register_command('who', CommandHandler.cmd_who)
@@ -167,18 +175,24 @@ class CommandHandler:
             tools = get_tool_definitions()
             tool_executor = ToolExecutor(bot.database)
 
-            # DEBUG: Print full messages array
-            print(f"\n=== MESSAGES BEING SENT TO API ({len(messages)} total) ===")
-            for i, msg in enumerate(messages):
-                role = msg['role']
-                content = msg.get('content', '[no content]')
-                # Truncate long content for readability
-                if len(content) > 200:
-                    content_preview = content[:200] + f"... ({len(content)} chars total)"
-                else:
-                    content_preview = content
-                print(f"  [{i}] {role}: {content_preview}")
-            print("=== END MESSAGES ===\n")
+            # Summarize context instead of dumping entire transcript
+            irc_context_block = next(
+                (msg for msg in messages if msg["role"] == "system" and "<irc_logs>" in msg.get("content", "")),
+                None
+            )
+            irc_lines = irc_context_block["content"].count("\n") if irc_context_block else 0
+            irc_chars = len(irc_context_block["content"]) if irc_context_block else 0
+
+            print("\n=== CONTEXT SUMMARY ===")
+            print(f"Channel: {channel}")
+            print(f"Conversation history turns (including latest user): {len(context.conversation_history)}")
+            if irc_context_block:
+                print(f"IRC log injected: yes ({irc_lines} lines / {irc_chars} chars)")
+            else:
+                print("IRC log injected: no")
+            prompt_preview = user_content if len(user_content) <= 200 else user_content[:200] + f"... ({len(user_content)} chars total)"
+            print(f"User prompt appended: {prompt_preview}")
+            print("=== END CONTEXT SUMMARY ===\n")
 
             # Tool calling loop - keep calling until we get a final text response
             max_iterations = 5  # Prevent infinite loops
@@ -274,18 +288,21 @@ class CommandHandler:
             if final_response is None:
                 final_response = "Sorry, I couldn't complete that request (too many tool calls)."
 
+            thinking_present = bool(re.search(r'<think(?:ing)?>|<thin>|<thought', final_response, flags=re.IGNORECASE))
+
             print(f"\n=== RAW RESPONSE FROM API ===")
             print(f"{final_response}")
             print(f"=== END RAW RESPONSE ===\n")
+            print(f"  Contains thinking tags: {'yes' if thinking_present else 'no'}")
 
             # Save to conversation history (WITH thinking tags - they're part of Terra's memory)
             await context.add_assistant_message(final_response)
 
             # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
-            import re
             # Strip all thinking tag variants: <think>, <thinking>, <thought>, etc.
             response_cleaned = re.sub(r'<think(?:ing)?>.*?</think(?:ing)?>', '', final_response, flags=re.DOTALL | re.IGNORECASE)
             response_cleaned = re.sub(r'<thought>.*?</thought>', '', response_cleaned, flags=re.DOTALL | re.IGNORECASE)
+            response_cleaned = re.sub(r'<thin>.*?</thin>', '', response_cleaned, flags=re.DOTALL | re.IGNORECASE)
             response_cleaned = response_cleaned.strip()
 
             # Also strip any timestamp/username prefix the AI might have added

@@ -46,6 +46,56 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_enhancement_request",
+            "description": "Capture an enhancement request for the maintainer. Saves a markdown file with your summary and the recent IRC context.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short name for this enhancement (will be used in the filename)."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "Describe the requested change or system-prompt tweak."
+                    }
+                },
+                "required": ["title", "summary"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_enhancement_requests",
+            "description": "List the enhancement request files Terra has already created.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_enhancement_request",
+            "description": "Read the contents of a previously created enhancement request markdown file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "Filename (from list_enhancement_requests) to inspect."
+                    }
+                },
+                "required": ["filename"]
+            }
+        }
     }
 ]
 
