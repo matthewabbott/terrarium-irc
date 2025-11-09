@@ -149,7 +149,6 @@ See [PYTHON_SETUP.md](PYTHON_SETUP.md) for Python environment best practices.
 - Multi-agent coordination (Terra communicating with other Terrarium agents)
 - Web dashboard for browsing logs and conversation history
 - Enhanced tool calling capabilities
-- Docker containerization
 
 ## License
 

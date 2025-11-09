@@ -28,6 +28,7 @@ env/
 
 # Environment Variables
 .env
+_*.service
 
 # Database
 data/
