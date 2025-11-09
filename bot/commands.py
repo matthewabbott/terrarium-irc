@@ -16,7 +16,7 @@ class CommandHandler:
         'ping': 'Check if the bot is responsive',
         'ask': 'Ask the LLM a question without IRC context',
         'terrarium': 'Ask the LLM with full IRC channel context',
-        'search': 'Search message history (usage: !search [user:nick] [hours:N] <query>)',
+        'search': 'Search message history (!search [user:nick] [hours:N] word1 word2 OR "exact phrase" OR word1+word2)',
         'stats': 'Show channel statistics (messages, users, etc.)'
     }
 
@@ -177,36 +177,47 @@ class CommandHandler:
     async def cmd_search(bot: 'TerrariumBot', channel: str, nick: str, args: str):
         """Search message history with optional filters."""
         if not args:
-            bot.send_message(
-                channel,
-                f"{nick}: Usage: {bot.command_prefix}search [user:nick] [hours:N] <query>"
-            )
+            bot.send_message(channel, f"{nick}: Usage: {bot.command_prefix}search [user:nick] [hours:N] <query>")
+            bot.send_message(channel, f"Query modes: word1 word2 (AND), word1+word2 (OR), \"exact phrase\"")
             return
 
         try:
+            import re
+
             # Parse optional filters from args
-            parts = args.split()
             search_user = None
             search_hours = None
-            query_parts = []
+            remaining_args = args
 
-            for part in parts:
-                if part.startswith('user:'):
-                    search_user = part[5:]  # Extract nickname after 'user:'
-                elif part.startswith('hours:'):
-                    try:
-                        search_hours = int(part[6:])  # Extract hours after 'hours:'
-                    except ValueError:
-                        bot.send_message(channel, f"{nick}: Invalid hours value: {part}")
-                        return
-                else:
-                    query_parts.append(part)
+            # Extract user: filter
+            user_match = re.search(r'user:(\S+)', remaining_args)
+            if user_match:
+                search_user = user_match.group(1)
+                remaining_args = remaining_args.replace(user_match.group(0), '', 1).strip()
 
-            # Reconstruct query from remaining parts
-            query = ' '.join(query_parts)
+            # Extract hours: filter
+            hours_match = re.search(r'hours:(\d+)', remaining_args)
+            if hours_match:
+                search_hours = int(hours_match.group(1))
+                remaining_args = remaining_args.replace(hours_match.group(0), '', 1).strip()
+
+            query = remaining_args.strip()
             if not query:
                 bot.send_message(channel, f"{nick}: Please provide a search query")
                 return
+
+            # Determine search mode based on query format
+            search_mode = "and"  # default
+
+            # Check for quoted phrase
+            quote_match = re.match(r'^"(.+)"$', query)
+            if quote_match:
+                query = quote_match.group(1)
+                search_mode = "phrase"
+            # Check for OR mode (+ delimiter)
+            elif '+' in query:
+                search_mode = "or"
+            # Otherwise use AND mode (default)
 
             # Build filter description
             filters = []
@@ -214,6 +225,10 @@ class CommandHandler:
                 filters.append(f"user:{search_user}")
             if search_hours:
                 filters.append(f"last {search_hours}h")
+            if search_mode == "or":
+                filters.append("OR mode")
+            elif search_mode == "phrase":
+                filters.append("exact phrase")
             filter_str = f" ({', '.join(filters)})" if filters else ""
 
             # Search with filters
@@ -222,7 +237,8 @@ class CommandHandler:
                 channel=channel,
                 nick=search_user,
                 hours=search_hours,
-                limit=10
+                limit=10,
+                search_mode=search_mode
             )
 
             if not results:

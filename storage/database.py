@@ -209,25 +209,42 @@ class Database:
         nick: Optional[str] = None,
         hours: Optional[int] = None,
         limit: int = 100,
-        message_types: Optional[List[str]] = None
+        message_types: Optional[List[str]] = None,
+        search_mode: str = "and"
     ) -> List[Message]:
         """
         Search messages by content.
 
         Args:
-            query: Text to search for in messages
+            query: Text to search for (can be phrase, words, or OR-separated with +)
             channel: Filter by specific channel
             nick: Filter by specific user nickname
             hours: Only search messages from last N hours
             limit: Maximum number of messages to return
             message_types: Filter by message types (default: ['PRIVMSG'] for conversation only)
+            search_mode: "and" (all words), "or" (any word), "phrase" (exact substring)
         """
         # Default to PRIVMSG only (conversation messages)
         if message_types is None:
             message_types = ['PRIVMSG']
 
-        sql = "SELECT * FROM messages WHERE message LIKE ?"
-        params = [f"%{query}%"]
+        # Build search condition based on mode
+        if search_mode == "phrase":
+            # Exact substring match
+            sql = "SELECT * FROM messages WHERE message LIKE ?"
+            params = [f"%{query}%"]
+        elif search_mode == "or":
+            # Any word matches (split on +)
+            words = [w.strip() for w in query.split('+') if w.strip()]
+            conditions = " OR ".join(["message LIKE ?"] * len(words))
+            sql = f"SELECT * FROM messages WHERE ({conditions})"
+            params = [f"%{word}%" for word in words]
+        else:  # "and" mode (default)
+            # All words must be present
+            words = query.split()
+            conditions = " AND ".join(["message LIKE ?"] * len(words))
+            sql = f"SELECT * FROM messages WHERE ({conditions})"
+            params = [f"%{word}%" for word in words]
 
         if channel:
             sql += " AND channel = ?"
