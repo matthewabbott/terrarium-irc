@@ -130,7 +130,8 @@ class CommandHandler:
         'search': 'Search message history (!search [user:nick] [hours:N] word1 word2 OR "exact phrase" OR word1+word2)',
         'stats': 'Show channel statistics (messages, users, etc.)',
         'who': 'List the users currently in channel',
-        'clear': 'Clear Terra\'s conversation memory for this channel'
+        'clear': 'Clear Terra\'s conversation memory for this channel',
+        'compact': 'Summarize older conversation turns to free up context tokens'
     }
 
     @staticmethod
@@ -143,6 +144,7 @@ class CommandHandler:
         bot.register_command('stats', CommandHandler.cmd_stats)
         bot.register_command('who', CommandHandler.cmd_who)
         bot.register_command('clear', CommandHandler.cmd_clear)
+        bot.register_command('compact', CommandHandler.cmd_compact)
         bot.register_command('ping', CommandHandler.cmd_ping)
 
     @staticmethod
@@ -363,6 +365,16 @@ class CommandHandler:
                     bot.send_message(channel, f"... {chunk}")
                 await asyncio.sleep(0.5)
 
+        except Exception as e:
+            bot.send_message(channel, f"{nick}: Error: {str(e)}")
+
+    @staticmethod
+    async def cmd_compact(bot: 'TerrariumBot', channel: str, nick: str, args: str):
+        """Summarize older conversation turns to reclaim context budget."""
+        try:
+            context = await bot.context_manager.get_context(channel)
+            await context.maybe_summarize(bot.llm_client)
+            bot.send_message(channel, f"{nick}: Conversation history compacted for {channel}")
         except Exception as e:
             bot.send_message(channel, f"{nick}: Error: {str(e)}")
             import traceback

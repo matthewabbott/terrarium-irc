@@ -78,6 +78,7 @@ In IRC:
 - `!search <term>` - Search message history
 - `!stats` - Show channel statistics
 - `!who` - Show users currently in channel
+- `!compact` - Force Terra to summarize older conversation history and free up tokens
 
 **Requires terrarium-agent:**
 - `!terrarium <question>` / `!ask <question>` - Ask Terra with persistent conversation context

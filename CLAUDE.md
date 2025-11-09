@@ -188,6 +188,7 @@ Commands are registered in `CommandHandler.register_all()` and routed by `Terrar
 - `!stats` - Show channel statistics
 - `!who` - Show users currently in channel
 - `!clear` - Clear Terra's conversation memory for this channel
+- `!compact` - Force Terra to summarize older context and shrink the prompt
 
 **Adding New Commands**:
 1. Add method to `CommandHandler` class
