@@ -94,7 +94,7 @@ AGENT_MAX_TOKENS=512
 **Bot Configuration:**
 
 ```ini
-COMMAND_PREFIX=.              # Command prefix (default: .)
+COMMAND_PREFIX=!              # Command prefix (default: !)
 MAX_CONTEXT_MESSAGES=50       # Number of IRC messages to show Terra
 ```
 
@@ -145,11 +145,10 @@ Joined #mychannel
 Join the channel(s) with your IRC client and test:
 
 ```
-.ping
-.help
-.ask What is 2 + 2?
-.terrarium What are we talking about?
-.who
+!ping
+!help
+!terrarium What are we talking about?
+!who
 ```
 
 ## Running as a Service (Production)

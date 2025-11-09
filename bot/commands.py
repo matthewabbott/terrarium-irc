@@ -2,7 +2,77 @@
 
 import asyncio
 import json
+import re
+import uuid
 from typing import TYPE_CHECKING
+
+FALLBACK_TOOL_NAMES = {"search_chat_logs", "get_current_users"}
+_TOOL_RESULT_PATTERN = re.compile(
+    r"<tool_result[^>]*>\s*(?P<body>.*?)\s*</tool_result>",
+    re.IGNORECASE | re.DOTALL
+)
+_FUNCTION_CALL_PATTERN = re.compile(
+    r"(?P<name>[a-zA-Z_][\w]*)\s*\((?P<args>[^)]*)\)"
+)
+
+
+def _coerce_fallback_value(raw: str):
+    """Best-effort conversion of textual arg values into native types."""
+    value = raw.strip()
+    if not value:
+        return ""
+
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        return value[1:-1]
+
+    lowered = value.lower()
+    if lowered in {"none", "null"}:
+        return None
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value
+
+
+def _parse_fallback_tool_request(content: str):
+    """
+    Parse textual tool requests like `<tool_result> search_chat_logs(query="x") </tool_result>`
+    and turn them into (tool_name, args) tuples.
+    """
+    if not content:
+        return None
+
+    text = content.strip()
+
+    match = _TOOL_RESULT_PATTERN.search(text)
+    if match:
+        candidate = match.group("body").strip()
+    else:
+        candidate = text
+
+    func_match = _FUNCTION_CALL_PATTERN.search(candidate)
+    if not func_match:
+        return None
+
+    tool_name = func_match.group("name")
+    if tool_name not in FALLBACK_TOOL_NAMES:
+        return None
+
+    args_str = func_match.group("args").strip()
+    args = {}
+    if args_str:
+        for part in re.split(r",(?![^()]*\))", args_str):
+            if not part or "=" not in part:
+                continue
+            key, value = part.split("=", 1)
+            args[key.strip()] = _coerce_fallback_value(value.strip())
+
+    return tool_name, args
 
 if TYPE_CHECKING:
     from .irc_client import TerrariumBot
@@ -15,10 +85,10 @@ class CommandHandler:
     COMMAND_HELP = {
         'help': 'Show available commands or get help for a specific command',
         'ping': 'Check if the bot is responsive',
-        'ask': 'Ask the LLM a question without IRC context',
-        'terrarium': 'Ask the LLM with full IRC channel context',
+        'terrarium': 'Ask Terra with full IRC channel context and tool access',
         'search': 'Search message history (!search [user:nick] [hours:N] word1 word2 OR "exact phrase" OR word1+word2)',
         'stats': 'Show channel statistics (messages, users, etc.)',
+        'who': 'List the users currently in channel',
         'clear': 'Clear Terra\'s conversation memory for this channel'
     }
 
@@ -26,7 +96,6 @@ class CommandHandler:
     def register_all(bot: 'TerrariumBot'):
         """Register all commands with the bot."""
         bot.register_command('help', CommandHandler.cmd_help)
-        bot.register_command('ask', CommandHandler.cmd_ask)
         bot.register_command('terrarium', CommandHandler.cmd_terrarium)
         bot.register_command('search', CommandHandler.cmd_search)
         bot.register_command('stats', CommandHandler.cmd_stats)
@@ -58,38 +127,6 @@ class CommandHandler:
         """Simple ping command."""
         print(f"  cmd_ping handler called for {nick} in {channel}")
         bot.send_message(channel, f"{nick}: pong!")
-
-    @staticmethod
-    async def cmd_ask(bot: 'TerrariumBot', channel: str, nick: str, args: str):
-        """Ask the LLM a question without context."""
-        if not args:
-            bot.send_message(channel, f"{nick}: Usage: {bot.command_prefix}ask <question>")
-            return
-
-        # Send thinking message
-        bot.send_message(channel, f"{nick}: Thinking...")
-
-        try:
-            # Generate response
-            system_prompt = bot.context_builder.build_system_prompt(channel)
-            response = await bot.llm_client.generate(
-                prompt=args,
-                system_prompt=system_prompt
-            )
-
-            # Split into IRC-friendly chunks
-            chunks = bot.context_builder.split_long_response(response, max_length=400)
-
-            # Send response
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    bot.send_message(channel, f"{nick}: {chunk}")
-                else:
-                    bot.send_message(channel, f"... {chunk}")
-                await asyncio.sleep(0.5)  # Avoid flooding
-
-        except Exception as e:
-            bot.send_message(channel, f"{nick}: Error: {str(e)}")
 
     @staticmethod
     async def cmd_terrarium(bot: 'TerrariumBot', channel: str, nick: str, args: str):
@@ -162,9 +199,28 @@ class CommandHandler:
 
                 print(f"  Response type: {response_message.get('role', 'unknown')}")
 
+                tool_calls = response_message.get("tool_calls") or []
+
+                # Fallback: parse textual tool requests when model can't emit structured tool_calls
+                if not tool_calls:
+                    fallback = _parse_fallback_tool_request(response_message.get("content", ""))
+                    if fallback:
+                        fallback_name, fallback_args = fallback
+                        print(f"  Parsed fallback tool request: {fallback_name} {fallback_args}")
+                        tool_calls = [{
+                            "id": f"fallback_{uuid.uuid4().hex}",
+                            "type": "function",
+                            "function": {
+                                "name": fallback_name,
+                                "arguments": json.dumps(fallback_args)
+                            }
+                        }]
+                        response_message["tool_calls"] = tool_calls
+                        response_message.setdefault("metadata", {})["fallback_tool_call"] = True
+
                 # Check if response includes tool calls
-                if "tool_calls" in response_message and response_message["tool_calls"]:
-                    print(f"  AI wants to call {len(response_message['tool_calls'])} tool(s)")
+                if tool_calls:
+                    print(f"  AI wants to call {len(tool_calls)} tool(s)")
 
                     # Save assistant message with tool calls to conversation history
                     await context.add_tool_call_message(response_message)
@@ -173,7 +229,7 @@ class CommandHandler:
                     messages.append(response_message)
 
                     # Execute each tool call
-                    for tool_call in response_message["tool_calls"]:
+                    for tool_call in tool_calls:
                         tool_id = tool_call["id"]
                         tool_name = tool_call["function"]["name"]
                         tool_args_str = tool_call["function"]["arguments"]

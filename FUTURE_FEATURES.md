@@ -259,7 +259,7 @@ Bob: "!terrarium what is Python?" [knows Bob prefers concise, gives short answer
 
 ## Analytics & Insights
 
-**Status**: Basic `.stats` command exists
+**Status**: Basic `!stats` command exists
 **Priority**: Low (not critical)
 
 **Goal**: Richer analytics about IRC activity and Terra usage.

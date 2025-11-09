@@ -62,17 +62,17 @@ The codebase is designed with the assumption that **agents will consume the data
 
 We use a **hybrid model** for context management:
 
-1. **Automatic (default)**: `.terrarium` auto-injects recent channel context
+1. **Automatic (default)**: `!terrarium` auto-injects recent channel context
 2. **Tool-based (when needed)**: Agent can explicitly request more context via tools
 
 This balances simplicity with flexibility.
 
-## Current Implementation: .terrarium Command
+## Current Implementation: !terrarium Command
 
 ### How It Works
 
 ```
-User: .terrarium what did Alice say about the bug?
+User: !terrarium what did Alice say about the bug?
 
 1. Bot receives command
 2. Automatically fetches last 50 messages from channel
@@ -152,7 +152,7 @@ These match **natural language queries** users might ask:
 
 ### Automatic Context (Current)
 
-**When:** User invokes `.terrarium`
+**When:** User invokes `!terrarium`
 
 **What:** Bot automatically fetches:
 - Last 50 PRIVMSG messages from current channel
@@ -192,9 +192,9 @@ ctx2 = await get_recent_messages(channel='#ops')
 Messages are formatted via `Message.to_context_string()`:
 
 ```
-[2025-11-04 21:10:18] <consultx> .ping
-[2025-11-04 21:10:16] <consultx> .help ping
-[2025-11-04 21:09:57] <consultx> .help
+[2025-11-04 21:10:18] <consultx> !ping
+[2025-11-04 21:10:16] <consultx> !help ping
+[2025-11-04 21:09:57] <consultx> !help
 ```
 
 **Design decisions:**
@@ -231,7 +231,7 @@ Multiple specialized agents working together:
 ```
 IRC Ambassador Agent
   ├─ Monitors channels
-  ├─ Responds to .terrarium
+  ├─ Responds to !terrarium
   └─ Has access to context tools
 
 Context Manager Agent
@@ -250,7 +250,7 @@ Research Agent
 ✅ **Storage layer**: Database with agent-friendly interface
 ✅ **Tool abstraction**: Methods designed for agent consumption
 ✅ **Message formatting**: LLM-readable chat logs
-✅ **Basic context injection**: .terrarium working
+✅ **Basic context injection**: !terrarium working
 
 ### What's Needed for Swarms
 
@@ -308,7 +308,7 @@ SQLite Storage (data/irc_logs.db)
 
 ---
 
-User: .terrarium <question>
+User: !terrarium <question>
     ↓
 CommandHandler.cmd_terrarium (bot/commands.py)
     ↓
@@ -330,7 +330,7 @@ IRC Response ← Send answer back to channel
 
 For immediate implementation, we keep it simple:
 
-### Single Command: .terrarium
+### Single Command: !terrarium
 
 **Behavior:**
 1. Fetch last 50 PRIVMSG from current channel
@@ -380,7 +380,7 @@ AGENT_TEMPERATURE=0.8
 AGENT_MAX_TOKENS=512
 
 # Bot Configuration
-COMMAND_PREFIX=.
+COMMAND_PREFIX=!
 MAX_CONTEXT_MESSAGES=50
 
 # Database
@@ -409,7 +409,7 @@ DB_PATH=./data/irc_logs.db
 2. ✅ **Optimize database indexes** (composite channel+timestamp)
 3. ✅ **Filter JOIN/PART noise** (PRIVMSG only for context)
 4. ✅ **Document architecture** (this file)
-5. ⏳ **Test .terrarium with real LLM** (ensure terrarium-agent server healthy)
+5. ⏳ **Test !terrarium with real LLM** (ensure terrarium-agent server healthy)
 6. ⏳ **Gather usage data** (what context size works best?)
 7. ⏳ **Consider explicit tools** (if automatic context insufficient)
 8. ⏳ **Explore agent frameworks** (when multi-agent needs arise)

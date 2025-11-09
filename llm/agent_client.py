@@ -140,8 +140,9 @@ class AgentClient:
 
         messages.append({"role": "user", "content": user_content})
 
-        # Use chat endpoint
-        return await self.chat(messages, temperature, max_tokens)
+        # Use chat endpoint and return plain content for compatibility
+        message = await self.chat(messages, temperature, max_tokens)
+        return message.get("content", "")
 
     async def health_check(self) -> bool:
         """

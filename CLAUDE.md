@@ -120,7 +120,7 @@ Terra-irc maintains TWO separate types of context:
      - Tool calls Terra has made
      - Tool results Terra has received
    - Persists across bot restarts
-   - Can be cleared with `.clear` command
+   - Can be cleared with `!clear` command
 
 **Why Dual Context?**
 - Prevents "context contamination" - Terra's thoughts don't include IRC formatting
@@ -128,7 +128,7 @@ Terra-irc maintains TWO separate types of context:
 - Tool calling history is preserved in conversation memory
 - Thinking tags saved in memory but stripped from IRC output
 
-**How `.terrarium` Works**:
+**How `!terrarium` Works**:
 1. Fetch recent IRC logs (decorated, as system message)
 2. Load conversation history (clean, from database)
 3. Add new user message (clean)
@@ -167,7 +167,7 @@ Environment variables are loaded from `.env` (see `.env.example`):
 - `AGENT_TEMPERATURE`, `AGENT_MAX_TOKENS`
 
 **Bot Settings**:
-- `COMMAND_PREFIX` (default: `.`)
+- `COMMAND_PREFIX` (default: `!`)
 - `MAX_CONTEXT_MESSAGES` (default: 50)
 
 **Tuning IRC Context Size** (`MAX_CONTEXT_MESSAGES`):
@@ -182,14 +182,13 @@ Environment variables are loaded from `.env` (see `.env.example`):
 Commands are registered in `CommandHandler.register_all()` and routed by `TerrariumBot._handle_command()`.
 
 **Available Commands**:
-- `.help [command]` - Show all commands or help for specific command
-- `.ping` - Bot health check
-- `.ask <question>` - Query LLM without IRC context
-- `.terrarium <question>` - Query Terra with persistent conversation context
-- `.search <term>` - Search message history
-- `.stats` - Show channel statistics
-- `.who` - Show users currently in channel
-- `.clear` - Clear Terra's conversation memory for this channel
+- `!help [command]` - Show all commands or help for specific command
+- `!ping` - Bot health check
+- `!terrarium <question>` - Query Terra with persistent conversation context
+- `!search <term>` - Search message history
+- `!stats` - Show channel statistics
+- `!who` - Show users currently in channel
+- `!clear` - Clear Terra's conversation memory for this channel
 
 **Adding New Commands**:
 1. Add method to `CommandHandler` class
@@ -234,7 +233,7 @@ def handle_event(irc, hostmask, args):
 ## Known Issues & Gotchas
 
 1. **Nickname conflicts**: If `IRC_NICK` is taken, bot will fail to connect. Change in `.env`.
-2. **terrarium-agent not required**: Bot runs without terrarium-agent server, but `.ask` and `.terrarium` commands won't work.
+2. **terrarium-agent not required**: Bot runs without terrarium-agent server, but `!terrarium` won't work.
 3. **Thread safety**: IRC runs in separate thread - always use `run_coroutine_threadsafe()` for async ops.
 4. **Message order**: Database returns DESC, but methods reverse to chronological for LLM context.
 5. **Dual contexts**: Remember IRC logs (decorated) vs conversation memory (clean) - see Context Management Strategy.

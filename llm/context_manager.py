@@ -261,6 +261,8 @@ Example tool usage:
 - "Did anyone mention deployment yesterday?" → search_chat_logs(query="deployment", hours=24)
 - "Who's here?" → get_current_users()
 
+When you need a tool, call it explicitly (the harness handles execution). **Do NOT** fabricate `<tool_result>` blocks—those come from the harness after the tool actually runs.
+
 After calling a tool, you'll receive results and can incorporate them into your response."""
 
 

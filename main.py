@@ -31,7 +31,7 @@ async def main():
     agent_max_tokens = int(os.getenv('AGENT_MAX_TOKENS', '512'))
 
     # Bot Configuration
-    command_prefix = os.getenv('COMMAND_PREFIX', '.')
+    command_prefix = os.getenv('COMMAND_PREFIX', '!')
     max_context_messages = int(os.getenv('MAX_CONTEXT_MESSAGES', '50'))
 
     # Database Configuration

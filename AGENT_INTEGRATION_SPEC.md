@@ -214,7 +214,7 @@ class ChannelContext:
 
 ### Context Injection Strategy
 
-**On Each `.terrarium` Command**:
+**On Each `!terrarium` Command**:
 
 1. **Check Staleness**
    ```python
@@ -261,16 +261,16 @@ class ChannelContext:
 
 **Example Timeline**:
 ```
-10:00 AM - User: ".terrarium what's Python?"
+10:00 AM - User: "!terrarium what's Python?"
           → New context, auto-inject last 30 IRC messages
           → Agent responds, adds to conversation history
 
-10:05 AM - User: ".terrarium can you explain decorators?"
+10:05 AM - User: "!terrarium can you explain decorators?"
           → Context active (5 min gap)
           → Use existing conversation history
           → No IRC re-injection
 
-12:30 PM - User: ".terrarium what is asyncio?"
+12:30 PM - User: "!terrarium what is asyncio?"
           → Context stale (2.5 hour gap)
           → Reset conversation, re-inject IRC
           → Start fresh conversation
@@ -484,7 +484,7 @@ Recent IRC context is provided automatically.
 
 **Standard Flow** (terrarium-agent with tool support):
 
-1. User: `.terrarium what did alice say about the bug?`
+1. User: `!terrarium what did alice say about the bug?`
 2. Bot builds message list with system prompt (includes tool definitions)
 3. Send to terrarium-agent API
 4. Agent responds with tool call:
@@ -748,7 +748,7 @@ Content-Type: application/json
 2. Create `llm/context_manager.py` for per-channel context tracking
 3. Update `main.py` to use AgentClient instead of Ollama
 4. Update configuration (`.env`) for terrarium-agent URL
-5. Test basic `.terrarium` command with new client
+5. Test basic `!terrarium` command with new client
 
 **Deliverables**:
 - Basic chat working with terrarium-agent
@@ -767,8 +767,8 @@ source venv/bin/activate
 python main.py
 
 # IRC: Test
-.terrarium hello
-.terrarium can you remember what I just said? (should work - same conversation)
+!terrarium hello
+!terrarium can you remember what I just said? (should work - same conversation)
 ```
 
 ### Phase 2: Context Management (Week 2)
@@ -790,12 +790,12 @@ python main.py
 **Testing**:
 ```bash
 # Test conversation continuity
-.terrarium what is python?
-.terrarium can you expand on that? (should remember previous response)
+!terrarium what is python?
+!terrarium can you expand on that? (should remember previous response)
 
 # Test staleness (manually set time or wait)
 # After 2+ hours of inactivity:
-.terrarium what is docker? (should reset and inject fresh IRC context)
+!terrarium what is docker? (should reset and inject fresh IRC context)
 ```
 
 ### Phase 3: Tool System (Week 3)
@@ -818,11 +818,11 @@ python main.py
 **Testing**:
 ```bash
 # Test search tool
-.terrarium what did alice say about the deployment?
+!terrarium what did alice say about the deployment?
 # Should trigger search_irc_history tool
 
 # Test recent messages tool
-.terrarium can you give me more context about what happened?
+!terrarium can you give me more context about what happened?
 # Should trigger get_recent_irc_messages tool
 ```
 
@@ -1025,7 +1025,7 @@ async def cmd_terrarium(bot: 'TerrariumBot', channel: str, nick: str, args: str)
 @staticmethod
 async def cmd_terrarium(bot: 'TerrariumBot', channel: str, nick: str, args: str):
     if not args:
-        bot.send_message(channel, f"{nick}: Usage: .terrarium <question>")
+        bot.send_message(channel, f"{nick}: Usage: !terrarium <question>")
         return
 
     bot.send_message(channel, f"{nick}: Thinking...")
@@ -1091,7 +1091,7 @@ AGENT_TEMPERATURE=0.8                # NEW
 AGENT_MAX_TOKENS=512                 # NEW
 
 # Bot Configuration
-COMMAND_PREFIX=.
+COMMAND_PREFIX=!
 MAX_CONTEXT_MESSAGES=50
 DB_PATH=./data/irc_logs.db
 
@@ -1236,7 +1236,7 @@ async def test_full_conversation_flow():
 
 ### Manual Testing Checklist
 
-- [ ] Basic chat: `.terrarium hello`
+- [ ] Basic chat: `!terrarium hello`
 - [ ] Conversation continuity: Ask follow-up question
 - [ ] Staleness: Wait 2+ hours, verify context resets
 - [ ] IRC context injection: Verify recent messages included
