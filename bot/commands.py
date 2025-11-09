@@ -16,9 +16,8 @@ class CommandHandler:
         'ping': 'Check if the bot is responsive',
         'ask': 'Ask the LLM a question without IRC context',
         'terrarium': 'Ask the LLM with full IRC channel context',
-        'search': 'Search message history for a term',
-        'stats': 'Show channel statistics (messages, users, etc.)',
-        'who': 'Show users currently in the channel'
+        'search': 'Search message history (usage: !search [user:nick] [hours:N] <query>)',
+        'stats': 'Show channel statistics (messages, users, etc.)'
     }
 
     @staticmethod
@@ -176,35 +175,70 @@ class CommandHandler:
 
     @staticmethod
     async def cmd_search(bot: 'TerrariumBot', channel: str, nick: str, args: str):
-        """Search message history."""
+        """Search message history with optional filters."""
         if not args:
             bot.send_message(
                 channel,
-                f"{nick}: Usage: {bot.command_prefix}search <term>"
+                f"{nick}: Usage: {bot.command_prefix}search [user:nick] [hours:N] <query>"
             )
             return
 
         try:
+            # Parse optional filters from args
+            parts = args.split()
+            search_user = None
+            search_hours = None
+            query_parts = []
+
+            for part in parts:
+                if part.startswith('user:'):
+                    search_user = part[5:]  # Extract nickname after 'user:'
+                elif part.startswith('hours:'):
+                    try:
+                        search_hours = int(part[6:])  # Extract hours after 'hours:'
+                    except ValueError:
+                        bot.send_message(channel, f"{nick}: Invalid hours value: {part}")
+                        return
+                else:
+                    query_parts.append(part)
+
+            # Reconstruct query from remaining parts
+            query = ' '.join(query_parts)
+            if not query:
+                bot.send_message(channel, f"{nick}: Please provide a search query")
+                return
+
+            # Build filter description
+            filters = []
+            if search_user:
+                filters.append(f"user:{search_user}")
+            if search_hours:
+                filters.append(f"last {search_hours}h")
+            filter_str = f" ({', '.join(filters)})" if filters else ""
+
+            # Search with filters
             results = await bot.database.search_messages(
-                query=args,
+                query=query,
                 channel=channel,
-                limit=5
+                nick=search_user,
+                hours=search_hours,
+                limit=10
             )
 
             if not results:
-                bot.send_message(channel, f"{nick}: No messages found matching '{args}'")
+                bot.send_message(channel, f"{nick}: No messages found for '{query}'{filter_str}")
                 return
 
-            # Send results
-            bot.send_message(channel, f"{nick}: Found {len(results)} messages:")
-            for msg in results[:5]:  # Show max 5 results
+            # Send results (max 5 to avoid flooding)
+            bot.send_message(channel, f"{nick}: Found {len(results)} messages for '{query}'{filter_str}:")
+            for msg in results[:5]:
                 time_str = msg.timestamp.strftime('%Y-%m-%d %H:%M')
-                preview = msg.message[:100] + '...' if len(msg.message) > 100 else msg.message
-                bot.send_message(
-                    channel,
-                    f"[{time_str}] <{msg.nick}> {preview}"
-                )
+                preview = msg.message[:80] + '...' if len(msg.message) > 80 else msg.message
+                bot.send_message(channel, f"[{time_str}] <{msg.nick}> {preview}")
                 await asyncio.sleep(0.5)
+
+            if len(results) > 5:
+                bot.send_message(channel, f"... and {len(results) - 5} more results")
 
         except Exception as e:
             bot.send_message(channel, f"{nick}: Error: {str(e)}")

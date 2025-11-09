@@ -206,6 +206,8 @@ class Database:
         self,
         query: str,
         channel: Optional[str] = None,
+        nick: Optional[str] = None,
+        hours: Optional[int] = None,
         limit: int = 100,
         message_types: Optional[List[str]] = None
     ) -> List[Message]:
@@ -215,6 +217,8 @@ class Database:
         Args:
             query: Text to search for in messages
             channel: Filter by specific channel
+            nick: Filter by specific user nickname
+            hours: Only search messages from last N hours
             limit: Maximum number of messages to return
             message_types: Filter by message types (default: ['PRIVMSG'] for conversation only)
         """
@@ -228,6 +232,15 @@ class Database:
         if channel:
             sql += " AND channel = ?"
             params.append(channel)
+
+        if nick:
+            sql += " AND nick = ?"
+            params.append(nick)
+
+        if hours:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            sql += " AND timestamp > ?"
+            params.append(cutoff)
 
         if message_types:
             placeholders = ','.join('?' * len(message_types))
