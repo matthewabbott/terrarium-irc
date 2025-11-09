@@ -4,6 +4,49 @@
 
 Build an IRC bot with LLM integration that can intelligently participate in conversations by accessing channel history and context. The bot should be easy to extend toward more sophisticated agent architectures (agent swarms, always-on context management, etc.).
 
+## Architectural Pattern: Inverted MCP
+
+**Current State (November 2024):**
+
+We've implemented an interesting architectural pattern that's essentially an **inverted Model Context Protocol (MCP)**:
+
+**Traditional MCP:**
+- Multiple LLM clients (different apps/services)
+- Connect to multiple MCP servers (tool providers)
+- Each client can access many tool servers
+
+**Our Pattern (Inverted MCP):**
+- **One LLM server** (terrarium-agent HTTP server)
+- **Multiple harnesses** (terrarium-irc, future: terrarium-web, terrarium-cron, etc.)
+- Each harness provides **different tools** to the same underlying LLM
+- Each harness maintains its own **context and state**
+
+**Why This Pattern?**
+
+This creates specialized agent "tendrils" from a single intelligence:
+- Terra-irc: Has IRC-specific tools (search_chat_logs, get_current_users)
+- Terra-web: Could have web-scraping tools, database queries
+- Terra-cron: Could have scheduling tools, system monitoring
+
+All using the same LLM (e.g., GLM-4.5-Air-4bit), but with different:
+- Tool sets (defined per harness)
+- Context (IRC logs vs web data vs system logs)
+- Personalities (system prompts)
+- Memory (separate conversation histories)
+
+**Benefits:**
+- Single LLM deployment handles multiple agent roles
+- Efficient GPU utilization (one model serves many agents)
+- Consistent intelligence across different domains
+- Easy to add new "tendrils" without deploying new models
+
+**Future:**
+- These tendrils could communicate via MCP (Terra-irc exposing IRC as MCP server)
+- Multi-agent coordination while sharing underlying intelligence
+- "Swarm of tendrils" from one neural core
+
+**Note:** This is worth documenting/blogging about as it's a novel pattern we haven't seen elsewhere.
+
 ## Design Philosophy
 
 ### Agent-First Thinking
@@ -19,17 +62,17 @@ The codebase is designed with the assumption that **agents will consume the data
 
 We use a **hybrid model** for context management:
 
-1. **Automatic (default)**: `!terrarium` auto-injects recent channel context
+1. **Automatic (default)**: `.terrarium` auto-injects recent channel context
 2. **Tool-based (when needed)**: Agent can explicitly request more context via tools
 
 This balances simplicity with flexibility.
 
-## Current Implementation: !terrarium Command
+## Current Implementation: .terrarium Command
 
 ### How It Works
 
 ```
-User: !terrarium what did Alice say about the bug?
+User: .terrarium what did Alice say about the bug?
 
 1. Bot receives command
 2. Automatically fetches last 50 messages from channel
@@ -109,7 +152,7 @@ These match **natural language queries** users might ask:
 
 ### Automatic Context (Current)
 
-**When:** User invokes `!terrarium`
+**When:** User invokes `.terrarium`
 
 **What:** Bot automatically fetches:
 - Last 50 PRIVMSG messages from current channel
@@ -149,9 +192,9 @@ ctx2 = await get_recent_messages(channel='#ops')
 Messages are formatted via `Message.to_context_string()`:
 
 ```
-[2025-11-04 21:10:18] <consultx> !ping
-[2025-11-04 21:10:16] <consultx> !help ping
-[2025-11-04 21:09:57] <consultx> !help
+[2025-11-04 21:10:18] <consultx> .ping
+[2025-11-04 21:10:16] <consultx> .help ping
+[2025-11-04 21:09:57] <consultx> .help
 ```
 
 **Design decisions:**
@@ -188,7 +231,7 @@ Multiple specialized agents working together:
 ```
 IRC Ambassador Agent
   ├─ Monitors channels
-  ├─ Responds to !terrarium
+  ├─ Responds to .terrarium
   └─ Has access to context tools
 
 Context Manager Agent
@@ -207,7 +250,7 @@ Research Agent
 ✅ **Storage layer**: Database with agent-friendly interface
 ✅ **Tool abstraction**: Methods designed for agent consumption
 ✅ **Message formatting**: LLM-readable chat logs
-✅ **Basic context injection**: !terrarium working
+✅ **Basic context injection**: .terrarium working
 
 ### What's Needed for Swarms
 
@@ -228,36 +271,29 @@ The current architecture supports this future:
 
 Each phase builds on previous without breaking changes.
 
-## LLM Client Design
+## Agent Client & Context Pipeline
 
-Located in `llm/client.py`:
+### Agent Client (`llm/agent_client.py`)
 
-### Current: Ollama Integration
+- Thin async wrapper over the terrarium-agent HTTP server (`/v1/chat/completions`)
+- Handles retries/backoff when the shared LLM endpoint is busy
+- Exposes both `chat()` and `generate()` for compatibility with older call sites
+- Keeps configuration simple: `AGENT_API_URL`, `AGENT_TEMPERATURE`, `AGENT_MAX_TOKENS`
 
-```python
-class LLMClient:
-    async def generate(
-        prompt: str,
-        system_prompt: str = "",
-        context: str = "",
-        temperature: float = 0.7,
-        max_tokens: int = 1000
-    ) -> str
-```
+### Dual-Context Manager (`llm/context_manager.py`)
 
-**Key features:**
-- Async interface (non-blocking)
-- Context injection support
-- Configurable temperature/tokens
-- Model agnostic (currently qwen2.5:7b)
+- Maintains per-channel state with TWO streams of information:
+  1. `<irc_logs>`: Decorated public feed with timestamps and joins/parts
+  2. Conversation memory: Clean assistant/user/tool turns persisted in SQLite
+- Rehydrates tool calls/results from JSON when the bot restarts so the LLM keeps full awareness
+- Wraps structured sections in XML tags so the model can easily parse them
 
-### Future: Multi-Model Support
+### Tool Executor (`llm/tool_executor.py`)
 
-Could support:
-- Different models for different tasks
-- Model routing based on query complexity
-- Fallback chains (primary model → backup)
-- Cost optimization (smaller models when possible)
+- Executes harness-specific tools (`search_chat_logs`, `get_current_users`)
+- Returns results wrapped in `<tool_result tool=\"...\">…</tool_result>` tags
+- Keeps tool logic close to the storage layer for low-latency lookups
+- Future harnesses can add their own executors while still sharing the same LLM server
 
 ## Data Flow
 
@@ -272,15 +308,20 @@ SQLite Storage (data/irc_logs.db)
 
 ---
 
-User: !terrarium <question>
+User: .terrarium <question>
     ↓
 CommandHandler.cmd_terrarium (bot/commands.py)
     ↓
-Database.get_recent_messages() ← Automatic context fetch
+ContextManager.get_messages_for_api()
+  ↳ Pulls conversation memory + `<irc_logs>` system message
     ↓
-ContextBuilder.build_context() ← Format for LLM
+AgentClient.chat(..., tools=llm.tools.get_tool_definitions())
     ↓
-LLMClient.generate() ← Send to LLM with context
+If tool_calls → ToolExecutor executes search/get_current_users
+    ↓
+Tool results appended as `<tool_result>` messages
+    ↓
+Final assistant reply saved (thinking tags preserved) and stripped before IRC
     ↓
 IRC Response ← Send answer back to channel
 ```
@@ -289,7 +330,7 @@ IRC Response ← Send answer back to channel
 
 For immediate implementation, we keep it simple:
 
-### Single Command: !terrarium
+### Single Command: .terrarium
 
 **Behavior:**
 1. Fetch last 50 PRIVMSG from current channel
@@ -328,19 +369,18 @@ Once this is solid, we can add:
 
 ```bash
 # IRC Configuration
-IRC_SERVER=irc.steelbea.me
+IRC_SERVER=irc.libera.chat
 IRC_PORT=6667
-IRC_NICK=terrarium
+IRC_NICK=Terra
 IRC_CHANNELS=#terrarium,#test
 
-# LLM Configuration
-LLM_MODEL=qwen2.5:7b
-LLM_API_URL=http://localhost:11434
-LLM_TEMPERATURE=0.7
-LLM_MAX_TOKENS=1000
+# Agent Configuration
+AGENT_API_URL=http://localhost:8080
+AGENT_TEMPERATURE=0.8
+AGENT_MAX_TOKENS=512
 
 # Bot Configuration
-COMMAND_PREFIX=!
+COMMAND_PREFIX=.
 MAX_CONTEXT_MESSAGES=50
 
 # Database
@@ -361,7 +401,7 @@ DB_PATH=./data/irc_logs.db
 - `README.md` - Project overview and setup
 - `bot/commands.py` - Command implementations
 - `storage/database.py` - Data access layer
-- `llm/context.py` - Context formatting for LLMs
+- `llm/context_manager.py` - Dual-context formatting and persistence
 
 ## Next Steps
 
@@ -369,7 +409,7 @@ DB_PATH=./data/irc_logs.db
 2. ✅ **Optimize database indexes** (composite channel+timestamp)
 3. ✅ **Filter JOIN/PART noise** (PRIVMSG only for context)
 4. ✅ **Document architecture** (this file)
-5. ⏳ **Test !terrarium with real LLM** (Ollama setup)
+5. ⏳ **Test .terrarium with real LLM** (ensure terrarium-agent server healthy)
 6. ⏳ **Gather usage data** (what context size works best?)
 7. ⏳ **Consider explicit tools** (if automatic context insufficient)
 8. ⏳ **Explore agent frameworks** (when multi-agent needs arise)

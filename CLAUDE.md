@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Terrarium is an IRC bot with local LLM integration designed for the NVIDIA DGX Spark. It logs IRC conversations to SQLite and provides context-aware AI responses using Ollama.
+Terrarium is an IRC bot with local LLM integration designed for the NVIDIA DGX Spark. It logs IRC conversations to SQLite and provides context-aware AI responses using terrarium-agent HTTP server.
 
 **Key Feature**: Agent-first architecture designed to support future multi-agent systems and LLM tool usage.
 
@@ -21,12 +21,14 @@ pip install -r requirements.txt
 
 ### Running the Bot
 ```bash
+# Start terrarium-agent server first (on port 8080)
+# (Refer to terrarium-agent documentation)
+
 # Run the bot (make sure venv is activated)
 python main.py
 
-# The bot works without Ollama - LLM commands will fail gracefully
-# To enable LLM features: install Ollama and pull a model
-./setup_ollama.sh
+# The bot works without terrarium-agent - LLM commands will fail gracefully
+# To enable LLM features: ensure terrarium-agent HTTP server is running at localhost:8080
 ```
 
 ### Database Operations
@@ -61,8 +63,10 @@ There are no automated tests yet. Manual testing is done via IRC interaction.
    - **Key Methods**: `get_recent_messages()`, `search_messages()`, `get_channel_stats()`
 
 3. **LLM Layer** (`llm/`)
-   - `client.py`: Ollama integration with async API
-   - `context.py`: Context formatting for LLM consumption
+   - `agent_client.py`: terrarium-agent HTTP client with async API
+   - `context_manager.py`: Dual-context architecture and persistent conversation memory
+   - `tools.py`: Tool definitions for Terra's capabilities
+   - `tool_executor.py`: Tool execution handlers (search_chat_logs, get_current_users)
 
 ### Agent-First Data Access
 
@@ -95,17 +99,48 @@ The composite index `idx_messages_channel_timestamp` on `messages(channel, times
 
 ### Context Management Strategy
 
-**Current Implementation**: Automatic context injection
-- `.terrarium` command auto-fetches last 50 PRIVMSG from channel
-- Formatted as chronological chat log with timestamps
-- Passed to LLM along with user's question
+**Current Implementation**: Dual-context architecture with persistent conversation memory
 
-**Future Vision**: Multi-agent architecture with explicit tool calls
-- Context Manager Agent decides what context to fetch
-- Research Agent can deep-dive into history
-- IRC Ambassador Agent coordinates responses
+Terra-irc maintains TWO separate types of context:
 
-Infrastructure for this exists but isn't yet exposed to LLM agents.
+1. **IRC Logs** (public, searchable, decorated):
+   - Stored in `messages` table
+   - Recent 50 messages auto-fetched and shown as system message
+   - Formatted with timestamps: `[20:15] <alice> hello`
+   - Shows "room state" - what's visible in the channel
+   - Includes JOIN/PART/QUIT events for context
+
+2. **Conversation Memory** (Terra's private memory, clean):
+   - Stored in `conversation_history` table (per-channel)
+   - Contains Terra's actual conversation with users
+   - Clean format (no timestamps or IRC decorations)
+   - Includes:
+     - User messages (clean text only)
+     - Terra's responses (WITH thinking tags preserved)
+     - Tool calls Terra has made
+     - Tool results Terra has received
+   - Persists across bot restarts
+   - Can be cleared with `.clear` command
+
+**Why Dual Context?**
+- Prevents "context contamination" - Terra's thoughts don't include IRC formatting
+- Distinction between "reading room logs" vs "remembering conversation"
+- Tool calling history is preserved in conversation memory
+- Thinking tags saved in memory but stripped from IRC output
+
+**How `.terrarium` Works**:
+1. Fetch recent IRC logs (decorated, as system message)
+2. Load conversation history (clean, from database)
+3. Add new user message (clean)
+4. Send all to terrarium-agent
+5. Execute any tool calls, add to conversation
+6. Save final response WITH thinking tags to conversation
+7. Strip thinking tags and send to IRC
+
+**Future Vision**: Multi-agent coordination
+- Terra communicating with other Terrarium agents
+- Shared knowledge across agent ecosystem
+- Cross-agent tool calling
 
 ## IRC Protocol Handling
 
@@ -127,19 +162,20 @@ Environment variables are loaded from `.env` (see `.env.example`):
 **IRC Settings**:
 - `IRC_SERVER`, `IRC_PORT`, `IRC_USE_SSL`, `IRC_NICK`, `IRC_CHANNELS`
 
-**LLM Settings**:
-- `LLM_MODEL` (default: `qwen2.5:7b`)
-- `LLM_API_URL` (default: `http://localhost:11434`)
-- `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`
+**Agent Settings**:
+- `AGENT_API_URL` (default: `http://localhost:8080`)
+- `AGENT_TEMPERATURE`, `AGENT_MAX_TOKENS`
 
 **Bot Settings**:
 - `COMMAND_PREFIX` (default: `.`)
 - `MAX_CONTEXT_MESSAGES` (default: 50)
 
-**Tuning Context Size**:
-- Lower (20-30): Faster, less tokens, might miss context
-- Higher (100-200): More context, slower, higher token cost
+**Tuning IRC Context Size** (`MAX_CONTEXT_MESSAGES`):
+- Controls how many recent IRC messages are fetched and shown to Terra
+- Lower (20-30): Faster, less tokens, might miss recent context
+- Higher (100-200): More IRC history, slower, higher token cost
 - Sweet spot (50): Good balance for most conversations
+- Note: This is separate from conversation memory (which has no limit)
 
 ## Command System
 
@@ -149,9 +185,11 @@ Commands are registered in `CommandHandler.register_all()` and routed by `Terrar
 - `.help [command]` - Show all commands or help for specific command
 - `.ping` - Bot health check
 - `.ask <question>` - Query LLM without IRC context
-- `.terrarium <question>` - Query LLM with full channel context
+- `.terrarium <question>` - Query Terra with persistent conversation context
 - `.search <term>` - Search message history
 - `.stats` - Show channel statistics
+- `.who` - Show users currently in channel
+- `.clear` - Clear Terra's conversation memory for this channel
 
 **Adding New Commands**:
 1. Add method to `CommandHandler` class
@@ -196,10 +234,13 @@ def handle_event(irc, hostmask, args):
 ## Known Issues & Gotchas
 
 1. **Nickname conflicts**: If `IRC_NICK` is taken, bot will fail to connect. Change in `.env`.
-2. **Ollama not required**: Bot runs without Ollama, but `.ask` and `.terrarium` commands won't work.
+2. **terrarium-agent not required**: Bot runs without terrarium-agent server, but `.ask` and `.terrarium` commands won't work.
 3. **Thread safety**: IRC runs in separate thread - always use `run_coroutine_threadsafe()` for async ops.
-4. **Context truncation**: `ContextBuilder` truncates at 4000 chars. Adjust `max_chars` if needed.
-5. **Message order**: Database returns DESC, but methods reverse to chronological for LLM context.
+4. **Message order**: Database returns DESC, but methods reverse to chronological for LLM context.
+5. **Dual contexts**: Remember IRC logs (decorated) vs conversation memory (clean) - see Context Management Strategy.
+6. **Thinking tags**: Saved in conversation_history but stripped from IRC output - Terra can reference past reasoning.
+7. **Tool call persistence**: All tool calls and results are saved to conversation_history and persist across restarts.
+8. **Context contamination**: User messages in conversation memory are CLEAN (no timestamps/decorations).
 
 ## Related Documentation
 

@@ -1,9 +1,8 @@
 [Unit]
-Description=Terrarium IRC Bot with LLM Integration
+Description=Terra IRC Bot (terrarium-irc harness)
 After=network.target
-# If using Ollama, add dependency
-# After=ollama.service
-# If using vLLM, start it separately
+# Note: Requires terrarium-agent HTTP server running on localhost:8080
+# The terrarium-agent server should be started separately (it manages vLLM in Docker)
 
 [Service]
 Type=simple
@@ -20,7 +19,7 @@ RestartSec=10
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=terrarium-bot
+SyslogIdentifier=terrarium-irc
 
 [Install]
 WantedBy=multi-user.target

@@ -21,7 +21,7 @@ async def main():
     irc_server = os.getenv('IRC_SERVER', 'irc.libera.chat')
     irc_port = int(os.getenv('IRC_PORT', '6667'))
     irc_use_ssl = os.getenv('IRC_USE_SSL', 'false').lower() == 'true'
-    irc_nick = os.getenv('IRC_NICK', 'terrarium-bot')
+    irc_nick = os.getenv('IRC_NICK', 'Terra')
     irc_channels = os.getenv('IRC_CHANNELS', '#test').split(',')
     irc_channels = [ch.strip() for ch in irc_channels]
 

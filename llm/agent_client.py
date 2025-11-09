@@ -1,8 +1,7 @@
 """
 terrarium-agent HTTP API client.
 
-Simple client for calling the Terrarium Agent HTTP API server.
-Replaces Ollama integration with terrarium-agent server.
+Simple client for calling the Terrarium Agent HTTP API server shared by all Terra harnesses.
 """
 
 import time
@@ -116,7 +115,7 @@ class AgentClient:
         max_tokens: int = 512
     ) -> str:
         """
-        Simple generation (compatibility with old Ollama interface).
+        Simple generation (compatibility with legacy single-shot interface).
 
         Args:
             prompt: User's message

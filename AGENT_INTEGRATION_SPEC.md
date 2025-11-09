@@ -1082,24 +1082,20 @@ Update `.env.example`:
 IRC_SERVER=irc.libera.chat
 IRC_PORT=6667
 IRC_USE_SSL=false
-IRC_NICK=terrarium-bot
+IRC_NICK=Terra
 IRC_CHANNELS=#test,#mychannel
 
-# LLM Configuration (terrarium-agent)
+# Agent Configuration (terrarium-agent)
 AGENT_API_URL=http://localhost:8080  # NEW
 AGENT_TEMPERATURE=0.8                # NEW
 AGENT_MAX_TOKENS=512                 # NEW
 
-# Context Management
-MAX_CONVERSATION_TURNS=10            # NEW: Max turns to keep in memory
-MAX_IRC_CONTEXT=30                   # NEW: Auto-inject N IRC messages
-CONTEXT_STALENESS_HOURS=2            # NEW: Reset after N hours inactive
-
 # Bot Configuration
 COMMAND_PREFIX=.
+MAX_CONTEXT_MESSAGES=50
 DB_PATH=./data/irc_logs.db
 
-# REMOVED: Ollama configuration
+# Legacy (Ollama) configuration for reference
 # LLM_MODEL=qwen2.5:7b
 # LLM_API_URL=http://localhost:11434
 ```

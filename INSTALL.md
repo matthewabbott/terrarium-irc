@@ -7,7 +7,7 @@ This guide provides step-by-step instructions for setting up the Terrarium IRC B
 - NVIDIA DGX Spark with CUDA-capable GPU(s)
 - Ubuntu 20.04+ or similar Linux distribution
 - Python 3.10 or higher
-- Internet connection for downloading models
+- terrarium-agent HTTP server running (see terrarium-agent documentation)
 - Access to an IRC server
 
 ## Installation Steps
@@ -44,69 +44,26 @@ This will:
 - Create a `.env` configuration file
 - Set up the data directory
 
-### 4. Choose and Setup LLM Backend
+### 4. Setup terrarium-agent Server
 
-#### Option A: Ollama (Easiest)
+The bot requires the terrarium-agent HTTP server for AI features.
 
-Ollama is recommended for getting started quickly:
+**Prerequisites:**
+- terrarium-agent installed and configured
+- Model loaded in terrarium-agent
+- Server running on default port 8080
 
-```bash
-./setup_ollama.sh
-```
-
-This will:
-- Install Ollama
-- Start the Ollama service
-- Download the Qwen 2.5 7B model (default)
-- Optionally download larger models
-
-**Manual Ollama Installation:**
+**Starting terrarium-agent:**
 
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# Start terrarium-agent HTTP server (refer to terrarium-agent documentation)
+terrarium-agent serve --port 8080
 
-# Start Ollama service
-sudo systemctl enable ollama
-sudo systemctl start ollama
-
-# Pull models
-ollama pull qwen2.5:7b      # 7B model (recommended)
-ollama pull qwen2.5:14b     # 14B model (better quality)
-ollama pull qwen2.5:32b     # 32B model (best quality)
-
-# Verify installation
-ollama list
+# Verify server is running
+curl http://localhost:8080/health
 ```
 
-#### Option B: vLLM (Best Performance)
-
-vLLM is recommended for production use on DGX Spark:
-
-```bash
-./setup_vllm.sh
-```
-
-This will:
-- Create a separate vLLM virtual environment
-- Install vLLM with CUDA support
-- Create a startup script for vLLM server
-
-**Starting vLLM Server:**
-
-```bash
-# Start vLLM server (created by setup script)
-./start_vllm.sh
-
-# Or manually:
-source venv-vllm/bin/activate
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --gpu-memory-utilization 0.9 \
-    --max-model-len 4096
-```
+**Note:** Refer to terrarium-agent documentation for detailed setup instructions, model selection, and configuration options.
 
 ### 5. Configure the Bot
 
@@ -116,30 +73,29 @@ Edit the `.env` file with your settings:
 nano .env
 ```
 
-**For IRC Configuration:**
+**IRC Configuration:**
 
 ```ini
 IRC_SERVER=irc.libera.chat    # Your IRC server
 IRC_PORT=6667                  # Port (6667 for plain, 6697 for SSL)
 IRC_USE_SSL=false             # Use true for SSL/TLS
-IRC_NICK=terrarium-bot        # Your bot's nickname
+IRC_NICK=Terra                # Your bot's nickname (e.g., Terra)
 IRC_CHANNELS=#test,#mychannel # Comma-separated channel list
 ```
 
-**For Ollama:**
+**Agent Configuration (terrarium-agent):**
 
 ```ini
-LLM_BACKEND=ollama
-LLM_MODEL=qwen2.5:7b
-LLM_API_URL=http://localhost:11434
+AGENT_API_URL=http://localhost:8080
+AGENT_TEMPERATURE=0.8
+AGENT_MAX_TOKENS=512
 ```
 
-**For vLLM:**
+**Bot Configuration:**
 
 ```ini
-LLM_BACKEND=vllm
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-LLM_API_URL=http://localhost:8000/v1
+COMMAND_PREFIX=.              # Command prefix (default: .)
+MAX_CONTEXT_MESSAGES=50       # Number of IRC messages to show Terra
 ```
 
 ### 6. Test the Bot
@@ -159,22 +115,26 @@ You should see output like:
 Terrarium IRC Bot
 ============================================================
 Server: irc.libera.chat:6667 (SSL: False)
-Nick: terrarium-bot
+Nick: Terra
 Channels: #test, #mychannel
-LLM: ollama (qwen2.5:7b)
+Agent: http://localhost:8080
 Database: ./data/irc_logs.db
 ============================================================
 
 Initializing database...
 Database ready.
 
-Initializing LLM client (ollama)...
-LLM client ready.
+Initializing Agent client (terrarium-agent)...
+Agent client ready.
+
+Initializing context manager...
+  Loaded 0 conversation turns for #test
+  Loaded 0 conversation turns for #mychannel
 
 Starting bot...
 
 Connecting to irc.libera.chat:6667...
-Connected as terrarium-bot
+Connected as Terra
 Joining channels: #test, #mychannel
 Joined #test
 Joined #mychannel
@@ -189,6 +149,7 @@ Join the channel(s) with your IRC client and test:
 .help
 .ask What is 2 + 2?
 .terrarium What are we talking about?
+.who
 ```
 
 ## Running as a Service (Production)
@@ -196,8 +157,8 @@ Join the channel(s) with your IRC client and test:
 ### 1. Edit the Service File
 
 ```bash
-cp terrarium-bot.service /etc/systemd/system/
-nano /etc/systemd/system/terrarium-bot.service
+cp terrarium-irc.service /etc/systemd/system/
+nano /etc/systemd/system/terrarium-irc.service
 ```
 
 Update the following lines:
@@ -208,28 +169,32 @@ Update the following lines:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable terrarium-bot
-sudo systemctl start terrarium-bot
+sudo systemctl enable terrarium-irc
+sudo systemctl start terrarium-irc
 ```
 
 ### 3. Check Status
 
 ```bash
-sudo systemctl status terrarium-bot
-sudo journalctl -u terrarium-bot -f  # Follow logs
+sudo systemctl status terrarium-irc
+sudo journalctl -u terrarium-irc -f  # Follow logs
 ```
 
 ## GPU Memory Considerations
 
-### Model Size vs. VRAM
+**Note:** GPU memory is managed by the terrarium-agent server, not by this IRC bot. The bot itself has minimal memory requirements. Refer to terrarium-agent documentation for model selection and VRAM requirements.
+
+### Model Size vs. VRAM (Reference)
+
+Common models and their approximate VRAM requirements:
 
 | Model | VRAM Required | Notes |
 |-------|---------------|-------|
-| Qwen 2.5 7B | ~14GB | Recommended for most use cases |
+| Qwen 2.5 7B | ~14GB | Good balance of quality and speed |
 | Qwen 2.5 14B | ~28GB | Better quality, needs more VRAM |
-| Qwen 2.5 32B | ~64GB | Best quality, requires high-end GPU |
+| GLM-4.5-Air-4bit | ~8GB | Quantized, very efficient |
 | Llama 3.1 8B | ~16GB | Alternative to Qwen |
-| Llama 3.1 70B | ~140GB | Requires multiple GPUs |
+| Llama 3.1 70B | ~140GB | Requires multiple GPUs or quantization |
 
 ### Check GPU Memory
 
@@ -254,32 +219,21 @@ source venv/bin/activate
 which python  # Should point to venv
 
 # Check dependencies
-pip list | grep -E "miniirc|ollama|openai|aiosqlite"
+pip list | grep -E "miniirc|requests|aiosqlite"
 ```
 
-### LLM backend not responding
-
-**For Ollama:**
+### terrarium-agent not responding
 
 ```bash
-# Check Ollama status
-systemctl status ollama
+# Check if terrarium-agent is running
+curl http://localhost:8080/health
 
-# Test Ollama
-curl http://localhost:11434/api/tags
+# Test API endpoint
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "test"}]}'
 
-# Check models
-ollama list
-```
-
-**For vLLM:**
-
-```bash
-# Check if vLLM is running
-curl http://localhost:8000/v1/models
-
-# Check vLLM logs
-./start_vllm.sh  # Check output for errors
+# Check terrarium-agent logs (refer to terrarium-agent documentation)
 ```
 
 ### Database issues
@@ -310,31 +264,23 @@ sudo ufw status
 
 ## Performance Tuning
 
-### For vLLM
+### For terrarium-agent
 
-Adjust in `start_vllm.sh`:
-
-```bash
-# Increase batch size for throughput
---max-num-batched-tokens 2048
-
-# Reduce memory usage
---gpu-memory-utilization 0.8
-
-# Enable tensor parallelism (multi-GPU)
---tensor-parallel-size 2
-```
+Refer to terrarium-agent documentation for performance tuning options (batch size, memory utilization, tensor parallelism, etc.).
 
 ### For Bot
 
 Adjust in `.env`:
 
 ```ini
-# More context for better responses
+# More IRC context for better responses (uses more tokens)
 MAX_CONTEXT_MESSAGES=100
 
-# Faster responses (less context)
+# Less IRC context for faster responses (uses fewer tokens)
 MAX_CONTEXT_MESSAGES=25
+
+# Note: This only affects IRC logs shown to Terra
+# Conversation memory has no limit and persists across restarts
 ```
 
 ## Upgrading
@@ -348,15 +294,20 @@ source venv/bin/activate
 pip install -r requirements.txt --upgrade
 
 # Restart bot
-sudo systemctl restart terrarium-bot
+sudo systemctl restart terrarium-irc
 ```
 
 ## Next Steps
 
 - Customize commands in `bot/commands.py`
-- Adjust system prompt in `llm/context.py`
+- Adjust Terra's system prompt in `llm/context_manager.py`
+- Add new tools in `llm/tools.py` and `llm/tool_executor.py`
 - Set up log rotation for the database
-- Configure backup for IRC logs
-- Monitor performance with `nvidia-smi`
+- Configure backup for IRC logs and conversation history
+- Monitor GPU usage with `nvidia-smi` (if running terrarium-agent locally)
+- Explore dual-context architecture in `llm/context_manager.py`
 
-For more information, see the main [README.md](README.md).
+For more information, see:
+- [README.md](README.md) - User guide
+- [CLAUDE.md](CLAUDE.md) - Developer documentation
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Architectural vision
