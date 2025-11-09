@@ -142,12 +142,27 @@ class CommandHandler:
                 max_tokens=512
             )
 
+            print(f"\n=== RAW RESPONSE FROM API ===")
+            print(f"{response}")
+            print(f"=== END RAW RESPONSE ===\n")
+
             # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
             import re
-            response_cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+            # Strip all <think>...</think> blocks (there might be multiple)
+            response_cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+            response_cleaned = response_cleaned.strip()
 
-            # Add to conversation history (save original response with thinking)
-            await context.add_assistant_message(response)
+            # Also strip any timestamp/username prefix the AI might have added
+            # Pattern: [HH:MM] <Terra> or [HH:MM] <Username> at start of message
+            response_cleaned = re.sub(r'^\[\d{2}:\d{2}\]\s*<?[\w\s]+>?\s*', '', response_cleaned)
+            response_cleaned = response_cleaned.strip()
+
+            print(f"=== CLEANED RESPONSE (after stripping <think> and timestamps) ===")
+            print(f"{response_cleaned}")
+            print(f"=== END CLEANED RESPONSE ===\n")
+
+            # Add to conversation history (save cleaned response)
+            await context.add_assistant_message(response_cleaned)
 
             # Send to IRC (split if needed, use cleaned response)
             chunks = bot.context_builder.split_long_response(response_cleaned, max_length=400)

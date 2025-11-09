@@ -122,10 +122,12 @@ class ChannelContext:
         Args:
             message: Response content
         """
-        # Add timestamp to assistant messages so AI can see its own responses with context
+        # Add timestamp to assistant messages, but don't include username
+        # (AI knows assistant messages are from Terra, no need to show it)
+        # This prevents Terra from mimicking the <Terra> format in responses
         timestamp = datetime.now()
         time_str = timestamp.strftime('%H:%M')
-        content = f"[{time_str}] <Terra> {message}"
+        content = f"[{time_str}] {message}"
 
         self.conversation_history.append({
             "role": "assistant",
@@ -195,21 +197,21 @@ class ChannelContext:
         if not recent_irc:
             # No IRC activity during gap
             if gap_minutes < 60:
-                return f"[System: {gap_minutes} minutes have passed since your last response.]"
+                return f"IMPORTANT: {gap_minutes} minutes have passed since your last response. There was no IRC activity during this time."
             else:
                 hours_gap = gap_minutes / 60
-                return f"[System: {hours_gap:.1f} hours have passed since your last response.]"
+                return f"IMPORTANT: {hours_gap:.1f} hours have passed since your last response. There was no IRC activity during this time."
 
         # Build context with IRC activity
         lines = []
 
         if gap_minutes < 60:
-            lines.append(f"[System: {gap_minutes} minutes have passed. {len(recent_irc)} IRC messages since your last response.]")
+            lines.append(f"IMPORTANT: {gap_minutes} minutes have passed since your last response.")
+            lines.append(f"Here are the {len(recent_irc)} IRC messages that occurred during this gap:\n")
         else:
             hours_gap = gap_minutes / 60
-            lines.append(f"[System: {hours_gap:.1f} hours have passed. {len(recent_irc)} IRC messages since your last response.]")
-
-        lines.append("\nRecent IRC activity:")
+            lines.append(f"IMPORTANT: {hours_gap:.1f} hours have passed since your last response.")
+            lines.append(f"Here are the {len(recent_irc)} IRC messages that occurred during this gap:\n")
         for msg in recent_irc:
             time_str = msg.timestamp.strftime('%H:%M')
             # Format based on message type
