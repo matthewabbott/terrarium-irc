@@ -5,12 +5,18 @@ Simplified: Shows recent IRC activity with timestamps.
 """
 
 import json
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
+
+from llm.agent_client import AgentClient, AgentClientError
 from storage import Database
 
 
 class ChannelContext:
     """Manages conversation context for a single IRC channel."""
+
+    SUMMARY_TRIGGER_TURNS = 40
+    SUMMARY_RETAIN_TURNS = 12
+    SUMMARY_INPUT_CHAR_LIMIT = 4000
 
     def __init__(self, channel: str, db: Database):
         """
@@ -23,6 +29,7 @@ class ChannelContext:
         self.channel = channel
         self.db = db
         self.conversation_history: List[Dict[str, Any]] = []
+        self.summary: Optional[str] = None
         self._loaded = False
 
     async def load(self):
@@ -59,13 +66,13 @@ class ChannelContext:
                 })
 
         self.conversation_history = hydrated_history
-
+        self.summary = await self.db.get_conversation_summary(self.channel)
         self._loaded = True
         print(f"  Loaded {len(self.conversation_history)} conversation turns for {self.channel}")
 
     async def get_messages_for_api(
         self,
-        irc_context_limit: int = 50
+        irc_context_limit: int = 20
     ) -> List[Dict[str, str]]:
         """
         Build message list for API call.
@@ -86,6 +93,12 @@ class ChannelContext:
             "role": "system",
             "content": self._build_system_prompt()
         })
+
+        if self.summary:
+            messages.append({
+                "role": "system",
+                "content": f"<conversation_summary>\n{self.summary}\n</conversation_summary>"
+            })
 
         # 2. Get recent IRC channel messages (last N messages from everyone)
         recent_irc = await self.db.get_recent_messages(
@@ -208,8 +221,68 @@ class ChannelContext:
     async def clear(self):
         """Clear conversation history."""
         self.conversation_history = []
+        self.summary = None
         await self.db.clear_conversation_history(self.channel)
+        await self.db.save_conversation_summary(self.channel, "")
         print(f"  Cleared conversation history for {self.channel}")
+
+    async def maybe_summarize(self, agent_client: AgentClient):
+        """Summarize older turns to keep context small."""
+        if len(self.conversation_history) <= self.SUMMARY_TRIGGER_TURNS:
+            return
+
+        turns_to_summarize = self.conversation_history[:-self.SUMMARY_RETAIN_TURNS]
+        if not turns_to_summarize:
+            return
+
+        summary_payload = self._format_turns_for_summary(turns_to_summarize)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are Terra-irc's memory compressor. Summarize the following conversation "
+                    "into key facts, outstanding questions, and any tool usage/results that Terra should remember. "
+                    "Be concise (<= 8 sentences) and omit trivial greetings."
+                )
+            },
+            {
+                "role": "user",
+                "content": summary_payload
+            }
+        ]
+
+        try:
+            response = await agent_client.chat(
+                messages=messages,
+                temperature=0.2,
+                max_tokens=256
+            )
+        except AgentClientError as exc:
+            print(f"  Skipping summary for {self.channel}: {exc}")
+            return
+
+        summary_text = response.get("content", "").strip()
+        if not summary_text:
+            return
+
+        self.summary = summary_text
+        await self.db.save_conversation_summary(self.channel, summary_text)
+        self.conversation_history = self.conversation_history[-self.SUMMARY_RETAIN_TURNS:]
+        await self.db.keep_latest_conversation_turns(self.channel, self.SUMMARY_RETAIN_TURNS)
+        print(f"  Compressed conversation history for {self.channel}; retained {len(self.conversation_history)} turns.")
+
+    def _format_turns_for_summary(self, turns: List[Dict[str, Any]]) -> str:
+        lines = []
+        for turn in turns:
+            role = turn.get("role", "unknown").upper()
+            content = turn.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(part.get("text", "") for part in content if isinstance(part, dict))
+            lines.append(f"{role}: {content}")
+        text = "\n".join(lines)
+        if len(text) > self.SUMMARY_INPUT_CHAR_LIMIT:
+            text = text[-self.SUMMARY_INPUT_CHAR_LIMIT:]
+        return text
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for this channel."""

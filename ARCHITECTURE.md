@@ -381,7 +381,7 @@ AGENT_MAX_TOKENS=512
 
 # Bot Configuration
 COMMAND_PREFIX=!
-MAX_CONTEXT_MESSAGES=50
+MAX_CONTEXT_MESSAGES=20
 
 # Database
 DB_PATH=./data/irc_logs.db
@@ -389,7 +389,7 @@ DB_PATH=./data/irc_logs.db
 
 ### Tuning Context Size
 
-`MAX_CONTEXT_MESSAGES=50` is default. Considerations:
+`MAX_CONTEXT_MESSAGES=20` is default. Considerations:
 
 - **Lower (20-30)**: Faster, less token usage, might miss context
 - **Higher (100-200)**: More context, slower, higher token cost

@@ -9,7 +9,7 @@ An IRC bot with local LLM integration for the NVIDIA DGX Spark. Logs IRC convers
 - **Persistent Conversations**: Terra maintains conversation memory across requests
 - **Tool Calling**: Terra can search chat history and get user lists
 - **Dual-Context Architecture**: Separates IRC logs from conversation memory
-- **Self-Service Enhancements**: Terra can file enhancement requests (`data/enhancements/*.md`) with recent chat context
+- **Self-Service Enhancements**: Terra can file enhancement requests (`data/enhancements/*.md`) with recent chat context and automatically summarize older chat
 - **Commands**: `!help`, `!ping`, `!terrarium`/`!ask`, `!search`, `!stats`, `!who`, `!clear`
 
 ## Quick Start
@@ -108,7 +108,7 @@ See `.env.example` for all options. Key settings:
 
 - **IRC**: Server, port, nickname, channels
 - **Agent**: `AGENT_API_URL`, `AGENT_TEMPERATURE`, `AGENT_MAX_TOKENS`
-- **Bot**: Command prefix and IRC context window (`MAX_CONTEXT_MESSAGES`)
+- **Bot**: Command prefix and IRC context window (`MAX_CONTEXT_MESSAGES`, default 20 messages)
 
 ## Troubleshooting
 
@@ -136,7 +136,7 @@ See `.env.example` for all options. Key settings:
 4. **LLM Integration**: `!terrarium`/`!ask` send requests to terrarium-agent HTTP server
 5. **Dual-Context Architecture**: `!terrarium`/`!ask` provide:
    - **IRC Logs**: Recent channel activity with timestamps (decorated)
-   - **Conversation Memory**: Terra's persistent conversation history (clean)
+   - **Conversation Memory**: Terra's persistent conversation history (clean), automatically summarized when it gets long
 6. **Tool Calling**: Terra can call tools like `search_chat_logs` and `get_current_users`
 7. **Persistent Memory**: Terra's conversation history persists across bot restarts
 
@@ -146,7 +146,7 @@ See [PYTHON_SETUP.md](PYTHON_SETUP.md) for Python environment best practices.
 
 ## Enhancement Requests
 
-Terra can capture her own improvement ideas by calling the `create_enhancement_request` tool (available via `!terrarium` / `!ask`). Each request writes a markdown file under `data/enhancements/` containing her summary plus the last ~20 IRC messages for context. The directory is capped at 10 open files; she can review them with the `list_enhancement_requests` and `read_enhancement_request` tools. Check this folder periodically to see what the bot has asked for.
+Terra can capture her own improvement ideas by calling the `create_enhancement_request` tool (available via `!terrarium` / `!ask`). Each request writes a markdown file under `data/enhancements/` containing her summary plus the last ~20 IRC messages for context. The directory is capped at 10 open files; she can review them with the `list_enhancement_requests` and `read_enhancement_request` tools. The harness also summarizes older conversation history automatically, so these files are a useful breadcrumb trail for maintainers. Check this folder periodically to see what the bot has asked for.
 
 ## Future Plans
 

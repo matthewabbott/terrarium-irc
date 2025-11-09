@@ -168,14 +168,13 @@ Environment variables are loaded from `.env` (see `.env.example`):
 
 **Bot Settings**:
 - `COMMAND_PREFIX` (default: `!`)
-- `MAX_CONTEXT_MESSAGES` (default: 50)
+- `MAX_CONTEXT_MESSAGES` (default: 20)
 
 **Tuning IRC Context Size** (`MAX_CONTEXT_MESSAGES`):
 - Controls how many recent IRC messages are fetched and shown to Terra
-- Lower (20-30): Faster, less tokens, might miss recent context
-- Higher (100-200): More IRC history, slower, higher token cost
-- Sweet spot (50): Good balance for most conversations
-- Note: This is separate from conversation memory (which has no limit)
+- Lower (10-20): Faster, less tokens, relies on the automatic summaries
+- Higher (40-60): More raw IRC history, slower, higher token cost
+- Above ~60 is rarely needed because older turns are summarized automatically
 
 ## Command System
 

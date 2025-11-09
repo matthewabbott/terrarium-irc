@@ -32,7 +32,7 @@ async def main():
 
     # Bot Configuration
     command_prefix = os.getenv('COMMAND_PREFIX', '!')
-    max_context_messages = int(os.getenv('MAX_CONTEXT_MESSAGES', '50'))
+    max_context_messages = int(os.getenv('MAX_CONTEXT_MESSAGES', '20'))
 
     # Database Configuration
     db_path = os.getenv('DB_PATH', './data/irc_logs.db')
@@ -88,7 +88,8 @@ async def main():
         llm_client=agent_client,
         context_manager=context_manager,
         use_ssl=irc_use_ssl,
-        command_prefix=command_prefix
+        command_prefix=command_prefix,
+        max_context_messages=max_context_messages
     )
 
     # Register commands

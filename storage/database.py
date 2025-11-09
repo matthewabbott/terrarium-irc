@@ -67,6 +67,14 @@ class Database:
             )
         """)
 
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                channel TEXT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Track current users in each channel
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS channel_users (
@@ -350,6 +358,43 @@ class Database:
                 }
                 for row in rows
             ]
+
+    async def get_conversation_summary(self, channel: str) -> Optional[str]:
+        cursor = await self.db.execute("""
+            SELECT summary FROM conversation_summaries
+            WHERE channel = ?
+        """, (channel,))
+        row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def save_conversation_summary(self, channel: str, summary: str):
+        if not summary:
+            await self.db.execute("""
+                DELETE FROM conversation_summaries
+                WHERE channel = ?
+            """, (channel,))
+        else:
+            await self.db.execute("""
+                INSERT INTO conversation_summaries (channel, summary, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(channel) DO UPDATE SET
+                    summary = excluded.summary,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (channel, summary))
+        await self.db.commit()
+
+    async def keep_latest_conversation_turns(self, channel: str, limit: int):
+        await self.db.execute("""
+            DELETE FROM conversation_history
+            WHERE channel = ?
+              AND id NOT IN (
+                    SELECT id FROM conversation_history
+                    WHERE channel = ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+              )
+        """, (channel, channel, limit))
+        await self.db.commit()
 
     async def clear_conversation_history(self, channel: str):
         """Clear conversation history for a channel."""

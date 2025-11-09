@@ -153,14 +153,17 @@ class CommandHandler:
             # Get channel context
             context = await bot.context_manager.get_context(channel)
 
-            # Build message list for API (includes recent IRC activity + conversation history)
-            messages = await context.get_messages_for_api()
-
             # Add current user message - CLEAN (no timestamps, just the content)
             user_content = args  # Just the question, no decorations
 
             # Save to conversation history
             await context.add_user_message(user_content)
+            await context.maybe_summarize(bot.llm_client)
+
+            # Build message list for API (includes recent IRC activity + conversation history)
+            messages = await context.get_messages_for_api(
+                irc_context_limit=getattr(bot, "max_context_messages", 20)
+            )
 
             # Add to messages for this request
             messages.append({
@@ -190,6 +193,7 @@ class CommandHandler:
                 print(f"IRC log injected: yes ({irc_lines} lines / {irc_chars} chars)")
             else:
                 print("IRC log injected: no")
+            print(f"Conversation summary present: {'yes' if context.summary else 'no'}")
             prompt_preview = user_content if len(user_content) <= 200 else user_content[:200] + f"... ({len(user_content)} chars total)"
             print(f"User prompt appended: {prompt_preview}")
             print("=== END CONTEXT SUMMARY ===\n")

@@ -95,7 +95,7 @@ AGENT_MAX_TOKENS=512
 
 ```ini
 COMMAND_PREFIX=!              # Command prefix (default: !)
-MAX_CONTEXT_MESSAGES=50       # Number of IRC messages to show Terra
+MAX_CONTEXT_MESSAGES=20       # Number of IRC messages to show Terra
 ```
 
 ### 6. Test the Bot
@@ -274,13 +274,13 @@ Adjust in `.env`:
 
 ```ini
 # More IRC context for better responses (uses more tokens)
-MAX_CONTEXT_MESSAGES=100
+MAX_CONTEXT_MESSAGES=40
 
 # Less IRC context for faster responses (uses fewer tokens)
-MAX_CONTEXT_MESSAGES=25
+MAX_CONTEXT_MESSAGES=15
 
-# Note: This only affects IRC logs shown to Terra
-# Conversation memory has no limit and persists across restarts
+# Note: This only affects IRC logs shown to Terra (conversation summaries
+# compress older turns automatically when they exceed the internal limit)
 ```
 
 ## Upgrading

@@ -262,7 +262,7 @@ class ChannelContext:
 **Example Timeline**:
 ```
 10:00 AM - User: "!terrarium what's Python?"
-          → New context, auto-inject last 30 IRC messages
+          → New context, auto-inject last ~20 IRC messages
           → Agent responds, adds to conversation history
 
 10:05 AM - User: "!terrarium can you explain decorators?"
@@ -278,18 +278,19 @@ class ChannelContext:
 
 ### Context Window Management
 
-**Token Budget** (assuming ~8K context window):
+**Token Budget** (assuming ~8K context window with summaries):
 - System prompt: ~200 tokens
-- Last 10 conversation turns: ~2000-3000 tokens
-- Recent IRC context (30 messages): ~1000-1500 tokens
+- Conversation summary block: ~200-400 tokens when present
+- Last 10-12 raw conversation turns: ~1500-2200 tokens
+- Recent IRC context (~20 messages): ~600-900 tokens
 - User query: ~100-500 tokens
-- **Total input**: ~4000-5000 tokens
+- **Total input**: ~3200-4200 tokens
 - **Reserve for output**: 2000-3000 tokens
 
 **Limits**:
-- Max conversation turns: 10 (configurable via `MAX_CONVERSATION_TURNS`)
-- Max IRC context: 30 messages (configurable via `MAX_IRC_CONTEXT`)
-- Auto-prune if approaching token limit
+- Max raw conversation turns retained: ~12 (older turns summarized automatically)
+- Max IRC context: defaults to 20 messages (`MAX_CONTEXT_MESSAGES`)
+- Auto-summarize if conversation exceeds ~40 turns
 
 ---
 
@@ -1108,7 +1109,7 @@ AGENT_MAX_TOKENS=512                 # NEW
 
 # Bot Configuration
 COMMAND_PREFIX=!
-MAX_CONTEXT_MESSAGES=50
+MAX_CONTEXT_MESSAGES=20
 DB_PATH=./data/irc_logs.db
 
 # Legacy (Ollama) configuration for reference

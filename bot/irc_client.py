@@ -21,7 +21,8 @@ class TerrariumBot:
         llm_client: AgentClient,
         context_manager: ContextManager,
         use_ssl: bool = False,
-        command_prefix: str = "."
+        command_prefix: str = ".",
+        max_context_messages: int = 50
     ):
         """
         Initialize IRC bot.
@@ -46,6 +47,7 @@ class TerrariumBot:
         self.context_manager = context_manager
         self.use_ssl = use_ssl
         self.command_prefix = command_prefix
+        self.max_context_messages = max_context_messages
 
         self.context_builder = ContextBuilder()
         self.irc: Optional[miniirc.IRC] = None
