@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 FALLBACK_TOOL_NAMES = {
     "search_chat_logs",
@@ -20,6 +20,11 @@ _TOOL_RESULT_PATTERN = re.compile(
 _FUNCTION_CALL_PATTERN = re.compile(
     r"(?P<name>[a-zA-Z_][\w]*)\s*\((?P<args>[^)]*)\)"
 )
+
+MODEL_CONTEXT_LIMIT = 8192
+MIN_COMPLETION_TOKENS = 128
+MAX_COMPLETION_TOKENS = 512
+COMPLETION_BUFFER = 256  # reserved for safety
 
 
 def _coerce_fallback_value(raw: str):
@@ -79,6 +84,35 @@ def _parse_fallback_tool_request(content: str):
             args[key.strip()] = _coerce_fallback_value(value.strip())
 
     return tool_name, args
+
+
+def _estimate_prompt_tokens(messages):
+    total_chars = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total_chars += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    total_chars += len(part.get("text", ""))
+        else:
+            total_chars += len(str(content))
+        total_chars += 8  # account for role metadata
+    # Rough heuristic: 1 token ≈ 4 characters
+    return max(1, total_chars // 4)
+
+
+def _determine_max_tokens(messages) -> Tuple[int, int]:
+    prompt_tokens = _estimate_prompt_tokens(messages)
+    available = MODEL_CONTEXT_LIMIT - prompt_tokens - COMPLETION_BUFFER
+    if available <= 0:
+        max_tokens = 32
+    elif available < MIN_COMPLETION_TOKENS:
+        max_tokens = max(32, available)
+    else:
+        max_tokens = min(MAX_COMPLETION_TOKENS, available)
+    return max_tokens, prompt_tokens
 
 if TYPE_CHECKING:
     from .irc_client import TerrariumBot
@@ -206,12 +240,14 @@ class CommandHandler:
             while iteration < max_iterations:
                 iteration += 1
                 print(f"\n=== TOOL LOOP ITERATION {iteration} ===")
+                max_completion_tokens, approx_prompt_tokens = _determine_max_tokens(messages)
+                print(f"  Approx prompt tokens: {approx_prompt_tokens}; reserving {max_completion_tokens} for completion.")
 
                 # Call API with tools
                 response_message = await bot.llm_client.chat(
                     messages=messages,
                     temperature=0.8,
-                    max_tokens=512,
+                    max_tokens=max_completion_tokens,
                     tools=tools
                 )
 
