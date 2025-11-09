@@ -86,6 +86,10 @@ class ChannelContext:
                     "content": gap_context
                 })
 
+                # Save a marker to conversation history so AI remembers the gap occurred
+                # This prevents "amnesia" where the AI sees the gap message once then forgets
+                await self._save_gap_marker(time_gap_minutes)
+
         return messages
 
     async def add_user_message(self, nick: str, message: str):
@@ -149,6 +153,38 @@ class ChannelContext:
         self.last_activity = None
         await self.db.clear_conversation_history(self.channel)
         print(f"  Cleared conversation history for {self.channel}")
+
+    async def _save_gap_marker(self, gap_minutes: int):
+        """
+        Save a marker in conversation history that a gap occurred.
+
+        This ensures the AI remembers the gap in future turns, preventing
+        "amnesia" where it sees the gap message once then forgets.
+
+        Args:
+            gap_minutes: Length of gap in minutes
+        """
+        timestamp = datetime.now()
+        time_str = timestamp.strftime('%H:%M')
+
+        if gap_minutes < 60:
+            marker = f"[{time_str}] [System: Resuming after {gap_minutes} minute gap]"
+        else:
+            hours = gap_minutes / 60
+            marker = f"[{time_str}] [System: Resuming after {hours:.1f} hour gap]"
+
+        # Add to in-memory history as a user message (so it appears in conversation flow)
+        self.conversation_history.append({
+            "role": "user",
+            "content": marker
+        })
+
+        # Save to database
+        await self.db.save_conversation_turn(
+            channel=self.channel,
+            role="user",
+            content=marker
+        )
 
     def _get_time_gap_minutes(self) -> Optional[int]:
         """
