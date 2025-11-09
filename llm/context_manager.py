@@ -92,7 +92,19 @@ How your harness works:
 - The message starting with !terrarium is directed at you - respond to it
 - Your response will be sent back to IRC automatically
 - DO NOT include timestamps or your username in responses (IRC handles that)
-- You can use thinking tags (<think> or <thinking>) for reasoning - they'll be stripped from IRC output"""
+- You can use thinking tags (<think> or <thinking>) for reasoning - they'll be stripped from IRC output
+
+Tools available:
+You have access to tools that let you search chat logs and get user information.
+Use these when users ask about past conversations, specific topics, or who's online.
+
+Examples of when to use tools:
+- "What did alice say about docker?" → search_chat_logs(query="docker", user="alice")
+- "Did anyone mention deployment yesterday?" → search_chat_logs(query="deployment", hours=24)
+- "Who's here?" → get_current_users()
+- "Find messages about kubernetes from the last week" → search_chat_logs(query="kubernetes", hours=168)
+
+After calling a tool, you'll receive the results and can incorporate them into your response."""
 
 
 class ContextManager:

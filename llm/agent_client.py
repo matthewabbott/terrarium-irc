@@ -51,8 +51,9 @@ class AgentClient:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 512,
-        model: Optional[str] = None
-    ) -> str:
+        model: Optional[str] = None,
+        tools: Optional[List[Dict]] = None
+    ) -> Dict:
         """
         Generate response with conversation history.
 
@@ -61,9 +62,10 @@ class AgentClient:
             temperature: Sampling temperature 0.0-2.0
             max_tokens: Maximum tokens to generate
             model: Model name (auto-detected if omitted)
+            tools: Optional list of tool definitions for function calling
 
         Returns:
-            Assistant's response text
+            Full response dict (includes message and potentially tool_calls)
 
         Raises:
             AgentClientError: Request failed
@@ -77,8 +79,14 @@ class AgentClient:
         if model:
             payload["model"] = model
 
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"  # Let model decide when to use tools
+
         print(f"  AgentClient: Sending {len(messages)} messages to {self.base_url}/v1/chat/completions")
         print(f"  AgentClient: temp={temperature}, max_tokens={max_tokens}")
+        if tools:
+            print(f"  AgentClient: {len(tools)} tools available")
 
         response_data = await self._request_with_retry(
             "POST",
@@ -87,9 +95,15 @@ class AgentClient:
         )
 
         try:
-            response_content = response_data["choices"][0]["message"]["content"]
-            print(f"  AgentClient: Received response ({len(response_content)} chars)")
-            return response_content
+            # Return full response dict so caller can check for tool_calls
+            message = response_data["choices"][0]["message"]
+
+            if "content" in message and message["content"]:
+                print(f"  AgentClient: Received response ({len(message['content'])} chars)")
+            if "tool_calls" in message:
+                print(f"  AgentClient: Response includes {len(message['tool_calls'])} tool calls")
+
+            return message
         except (KeyError, IndexError) as e:
             raise AgentClientError(f"Invalid response format: {e}")
 

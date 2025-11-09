@@ -1,6 +1,7 @@
 """Command handlers for the IRC bot."""
 
 import asyncio
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -119,11 +120,18 @@ class CommandHandler:
                 "content": user_content
             })
 
+            # Import tools
+            from llm.tools import get_tool_definitions
+            from llm.tool_executor import ToolExecutor
+
+            tools = get_tool_definitions()
+            tool_executor = ToolExecutor(bot.database)
+
             # DEBUG: Print full messages array
             print(f"\n=== MESSAGES BEING SENT TO API ({len(messages)} total) ===")
             for i, msg in enumerate(messages):
                 role = msg['role']
-                content = msg['content']
+                content = msg.get('content', '[no content]')
                 # Truncate long content for readability
                 if len(content) > 200:
                     content_preview = content[:200] + f"... ({len(content)} chars total)"
@@ -132,21 +140,80 @@ class CommandHandler:
                 print(f"  [{i}] {role}: {content_preview}")
             print("=== END MESSAGES ===\n")
 
-            # Get response from agent
-            response = await bot.llm_client.chat(
-                messages=messages,
-                temperature=0.8,
-                max_tokens=512
-            )
+            # Tool calling loop - keep calling until we get a final text response
+            max_iterations = 5  # Prevent infinite loops
+            iteration = 0
+            final_response = None
+
+            while iteration < max_iterations:
+                iteration += 1
+                print(f"\n=== TOOL LOOP ITERATION {iteration} ===")
+
+                # Call API with tools
+                response_message = await bot.llm_client.chat(
+                    messages=messages,
+                    temperature=0.8,
+                    max_tokens=512,
+                    tools=tools
+                )
+
+                print(f"  Response type: {response_message.get('role', 'unknown')}")
+
+                # Check if response includes tool calls
+                if "tool_calls" in response_message and response_message["tool_calls"]:
+                    print(f"  AI wants to call {len(response_message['tool_calls'])} tool(s)")
+
+                    # Add assistant message with tool calls to conversation
+                    messages.append(response_message)
+
+                    # Execute each tool call
+                    for tool_call in response_message["tool_calls"]:
+                        tool_id = tool_call["id"]
+                        tool_name = tool_call["function"]["name"]
+                        tool_args_str = tool_call["function"]["arguments"]
+
+                        # Parse arguments
+                        try:
+                            tool_args = json.loads(tool_args_str)
+                        except json.JSONDecodeError:
+                            tool_args = {}
+
+                        # Execute tool
+                        tool_result = await tool_executor.execute_tool(
+                            tool_name=tool_name,
+                            arguments=tool_args,
+                            channel=channel
+                        )
+
+                        # Add tool result to messages
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_id,
+                            "name": tool_name,
+                            "content": tool_result
+                        })
+
+                        print(f"  Tool result added to conversation")
+
+                    # Continue loop to get AI's response based on tool results
+                    continue
+
+                # No tool calls - this is the final response
+                final_response = response_message.get("content", "")
+                print(f"  Final response received ({len(final_response)} chars)")
+                break
+
+            if final_response is None:
+                final_response = "Sorry, I couldn't complete that request (too many tool calls)."
 
             print(f"\n=== RAW RESPONSE FROM API ===")
-            print(f"{response}")
+            print(f"{final_response}")
             print(f"=== END RAW RESPONSE ===\n")
 
             # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
             import re
             # Strip all thinking tag variants: <think>, <thinking>, <thought>, etc.
-            response_cleaned = re.sub(r'<think(?:ing)?>.*?</think(?:ing)?>', '', response, flags=re.DOTALL | re.IGNORECASE)
+            response_cleaned = re.sub(r'<think(?:ing)?>.*?</think(?:ing)?>', '', final_response, flags=re.DOTALL | re.IGNORECASE)
             response_cleaned = re.sub(r'<thought>.*?</thought>', '', response_cleaned, flags=re.DOTALL | re.IGNORECASE)
             response_cleaned = response_cleaned.strip()
 
