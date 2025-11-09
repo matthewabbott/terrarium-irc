@@ -66,7 +66,11 @@ class ChannelContext:
             "content": self._build_system_prompt()
         })
 
-        # 2. Check for time gap and inject IRC context if needed
+        # 2. Full conversation history (all of it!)
+        messages.extend(self.conversation_history)
+
+        # 3. Check for time gap and inject IRC context if needed
+        # NOTE: We add this AFTER conversation history so it appears more recently
         time_gap_minutes = self._get_time_gap_minutes()
         print(f"  Gap detection: {time_gap_minutes} minutes" if time_gap_minutes else "  Gap detection: No gap")
         if time_gap_minutes is not None:
@@ -81,9 +85,6 @@ class ChannelContext:
                     "role": "system",
                     "content": gap_context
                 })
-
-        # 3. Full conversation history (all of it!)
-        messages.extend(self.conversation_history)
 
         return messages
 
