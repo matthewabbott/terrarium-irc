@@ -107,14 +107,33 @@ class CommandHandler:
             # Build message list for API
             messages = await context.get_messages_for_api()
 
-            # Add current user message
+            # Add current user message (with timestamp formatting)
+            from datetime import datetime
+            timestamp = datetime.now()
+            time_str = timestamp.strftime('%H:%M')
+            user_content = f"[{time_str}] <{nick}> {args}"
+
+            # Save to conversation history
             await context.add_user_message(nick, args)
 
-            # Append to messages for this request
+            # Append to messages for this request (matching the format we saved)
             messages.append({
                 "role": "user",
-                "content": f"{nick}: {args}"
+                "content": user_content
             })
+
+            # DEBUG: Print full messages array
+            print(f"\n=== MESSAGES BEING SENT TO API ({len(messages)} total) ===")
+            for i, msg in enumerate(messages):
+                role = msg['role']
+                content = msg['content']
+                # Truncate long content for readability
+                if len(content) > 200:
+                    content_preview = content[:200] + f"... ({len(content)} chars total)"
+                else:
+                    content_preview = content
+                print(f"  [{i}] {role}: {content_preview}")
+            print("=== END MESSAGES ===\n")
 
             # Get response from agent
             response = await bot.llm_client.chat(
@@ -123,11 +142,15 @@ class CommandHandler:
                 max_tokens=512
             )
 
-            # Add to conversation history
+            # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
+            import re
+            response_cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+
+            # Add to conversation history (save original response with thinking)
             await context.add_assistant_message(response)
 
-            # Send to IRC (split if needed)
-            chunks = bot.context_builder.split_long_response(response, max_length=400)
+            # Send to IRC (split if needed, use cleaned response)
+            chunks = bot.context_builder.split_long_response(response_cleaned, max_length=400)
             for i, chunk in enumerate(chunks):
                 if i == 0:
                     bot.send_message(channel, f"{nick}: {chunk}")

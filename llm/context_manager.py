@@ -95,7 +95,10 @@ class ChannelContext:
             nick: IRC nickname
             message: Message content
         """
-        content = f"{nick}: {message}"
+        # Add timestamp to all messages for AI context
+        timestamp = datetime.now()
+        time_str = timestamp.strftime('%H:%M')
+        content = f"[{time_str}] <{nick}> {message}"
 
         self.conversation_history.append({
             "role": "user",
@@ -109,7 +112,7 @@ class ChannelContext:
             content=content
         )
 
-        self.last_activity = datetime.now()
+        self.last_activity = timestamp
 
     async def add_assistant_message(self, message: str):
         """
@@ -118,19 +121,24 @@ class ChannelContext:
         Args:
             message: Response content
         """
+        # Add timestamp to assistant messages so AI can see its own responses with context
+        timestamp = datetime.now()
+        time_str = timestamp.strftime('%H:%M')
+        content = f"[{time_str}] <Terra> {message}"
+
         self.conversation_history.append({
             "role": "assistant",
-            "content": message
+            "content": content
         })
 
         # Save to database
         await self.db.save_conversation_turn(
             channel=self.channel,
             role="assistant",
-            content=message
+            content=content
         )
 
-        self.last_activity = datetime.now()
+        self.last_activity = timestamp
 
     async def clear(self):
         """Clear conversation history."""
@@ -174,12 +182,13 @@ class ChannelContext:
         Returns:
             Context string or None
         """
-        # Get IRC messages since last activity
+        # Get IRC messages since last activity (including system messages like JOIN/PART)
         hours = max(1, gap_minutes // 60 + 1)
         recent_irc = await self.db.get_recent_messages(
             channel=self.channel,
             limit=irc_limit,
-            hours=hours
+            hours=hours,
+            message_types=None  # Include all message types (PRIVMSG, JOIN, PART, etc.)
         )
 
         if not recent_irc:
@@ -202,7 +211,18 @@ class ChannelContext:
         lines.append("\nRecent IRC activity:")
         for msg in recent_irc:
             time_str = msg.timestamp.strftime('%H:%M')
-            lines.append(f"[{time_str}] <{msg.nick}> {msg.message}")
+            # Format based on message type
+            if msg.message_type == 'PRIVMSG':
+                lines.append(f"[{time_str}] <{msg.nick}> {msg.message}")
+            elif msg.message_type == 'JOIN':
+                lines.append(f"[{time_str}] * {msg.nick} joined {self.channel}")
+            elif msg.message_type == 'PART':
+                lines.append(f"[{time_str}] * {msg.nick} left {self.channel}")
+            elif msg.message_type == 'QUIT':
+                lines.append(f"[{time_str}] * {msg.nick} quit ({msg.message})")
+            else:
+                # Other message types - show as-is
+                lines.append(f"[{time_str}] * {msg.message_type}: {msg.message}")
 
         return "\n".join(lines)
 

@@ -77,6 +77,9 @@ class AgentClient:
         if model:
             payload["model"] = model
 
+        print(f"  AgentClient: Sending {len(messages)} messages to {self.base_url}/v1/chat/completions")
+        print(f"  AgentClient: temp={temperature}, max_tokens={max_tokens}")
+
         response_data = await self._request_with_retry(
             "POST",
             "/v1/chat/completions",
@@ -84,7 +87,9 @@ class AgentClient:
         )
 
         try:
-            return response_data["choices"][0]["message"]["content"]
+            response_content = response_data["choices"][0]["message"]["content"]
+            print(f"  AgentClient: Received response ({len(response_content)} chars)")
+            return response_content
         except (KeyError, IndexError) as e:
             raise AgentClientError(f"Invalid response format: {e}")
 
