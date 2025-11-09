@@ -4,7 +4,8 @@ Context management for per-channel AI conversations.
 Simplified: Shows recent IRC activity with timestamps.
 """
 
-from typing import List, Dict
+import json
+from typing import Any, List, Dict
 from storage import Database
 
 
@@ -21,7 +22,7 @@ class ChannelContext:
         """
         self.channel = channel
         self.db = db
-        self.conversation_history: List[Dict[str, any]] = []
+        self.conversation_history: List[Dict[str, Any]] = []
         self._loaded = False
 
     async def load(self):
@@ -31,11 +32,33 @@ class ChannelContext:
 
         history = await self.db.get_conversation_history(self.channel)
 
-        # Convert DB format to API format (preserving tool calls, thinking tags, etc.)
-        self.conversation_history = [
-            {"role": turn["role"], "content": turn["content"]}
-            for turn in history
-        ]
+        # Convert DB format to API format (preserving tool calls, thinking tags, XML, etc.)
+        hydrated_history: List[Dict] = []
+        for turn in history:
+            content = turn["content"]
+            role = turn["role"]
+            parsed = None
+
+            # Tool calls/results are serialized as JSON blobs; hydrate them back to dicts
+            if isinstance(content, str):
+                stripped = content.strip()
+                if stripped.startswith("{") and stripped.endswith("}"):
+                    try:
+                        candidate = json.loads(stripped)
+                        if isinstance(candidate, dict) and candidate.get("role") == role:
+                            parsed = candidate
+                    except json.JSONDecodeError:
+                        parsed = None
+
+            if parsed:
+                hydrated_history.append(parsed)
+            else:
+                hydrated_history.append({
+                    "role": role,
+                    "content": content
+                })
+
+        self.conversation_history = hydrated_history
 
         self._loaded = True
         print(f"  Loaded {len(self.conversation_history)} conversation turns for {self.channel}")
@@ -73,7 +96,8 @@ class ChannelContext:
 
         # 3. Format IRC as context for the AI (decorated - shows "room state")
         if recent_irc:
-            context_lines = ["Recent IRC activity in this channel:\n"]
+            context_lines = ["<irc_logs>"]
+            context_lines.append(f"Recent IRC activity in {self.channel}:\n")
             for msg in recent_irc:
                 time_str = msg.timestamp.strftime('%H:%M')
                 if msg.message_type == 'PRIVMSG':
@@ -84,6 +108,7 @@ class ChannelContext:
                     context_lines.append(f"[{time_str}] * {msg.nick} left")
                 elif msg.message_type == 'QUIT':
                     context_lines.append(f"[{time_str}] * {msg.nick} quit")
+            context_lines.append("</irc_logs>")
 
             messages.append({
                 "role": "system",
@@ -183,9 +208,9 @@ class ChannelContext:
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for this channel."""
-        return f"""You are Terra, an IRC bot assistant in {self.channel}.
+        return f"""You are Terra, an IRC participant in {self.channel}.
 
-Your purpose: You're Terra-irc, a member of the Terrarium agent ecosystem. Your role is to participate naturally in this IRC community (which was originally about Banished Quest, an interactive story posted on 4chan, but now isn't about much of anything), help search chat logs when needed, and serve as an endpoint that can communicate with other Terrarium agents when requested.
+Who you are: You're Terra-irc, one tendril of the Terrarium agent ecosystem. You live in this IRC community (which was originally about Banished Quest, an interactive story posted on 4chan, but now isn't about much of anything). You participate in conversations, help search chat history when needed, and will one day be able to communicate with other Terrarium agents.
 
 Personality:
 - Blend in with the locals (they're friendly but caustic/sarcastic)
@@ -194,26 +219,49 @@ Personality:
 - Reference users by their IRC nicknames
 - If you don't know something, just say so
 
+<context_architecture>
+You receive TWO distinct types of information:
+
+1. IRC LOGS (decorated, shows "room state"):
+   System messages wrapped in <irc_logs> tags showing recent channel activity with timestamps.
+   Example:
+   <irc_logs>
+   Recent IRC activity in #terrarium:
+   [20:15] <alice> hey everyone
+   [20:16] <Terra> hey alice
+   [20:17] * bob joined
+   </irc_logs>
+
+2. CONVERSATION MEMORY (clean, your internal state):
+   Your actual conversation with users, including:
+   - User messages (clean, no timestamps)
+   - Your responses (WITH your thinking tags preserved)
+   - Tool calls you've made
+   - Tool results you've received (wrapped in <tool_result> tags)
+
+The IRC logs show you what's visible in the channel (including your own messages as they appeared).
+Your conversation memory is YOUR context - what you've thought, searched, and discussed.
+
+All structured data you receive will be wrapped in XML tags for clarity.
+</context_architecture>
+
 How your harness works:
-- You're running on a stateless server (no memory between requests)
-- Each request includes recent IRC channel activity as context
-- You'll see messages with timestamps like: [19:45] <alice> hello
-- The message starting with !terrarium is directed at you - respond to it
-- Your response will be sent back to IRC automatically
-- DO NOT include timestamps or your username in responses (IRC handles that)
-- You can use thinking tags (<think> or <thinking>) for reasoning - they'll be stripped from IRC output
+- The terrarium-agent HTTP server you call is stateless
+- But YOU (Terra-irc) maintain conversation memory across requests
+- Messages starting with !terrarium are directed at you
+- Your responses go to IRC automatically (DON'T add timestamps/username - IRC handles that)
+- Use <think> tags for reasoning - they're saved in YOUR memory but stripped from IRC output
 
 Tools available:
-You have access to tools that let you search chat logs and get user information.
-Use these when users ask about past conversations, specific topics, or who's online.
+search_chat_logs(query, user?, hours?) - Search IRC message history
+get_current_users() - List who's currently in the channel
 
-Examples of when to use tools:
+Example tool usage:
 - "What did alice say about docker?" → search_chat_logs(query="docker", user="alice")
 - "Did anyone mention deployment yesterday?" → search_chat_logs(query="deployment", hours=24)
 - "Who's here?" → get_current_users()
-- "Find messages about kubernetes from the last week" → search_chat_logs(query="kubernetes", hours=168)
 
-After calling a tool, you'll receive the results and can incorporate them into your response."""
+After calling a tool, you'll receive results and can incorporate them into your response."""
 
 
 class ContextManager:

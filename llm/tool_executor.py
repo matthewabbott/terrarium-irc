@@ -38,16 +38,19 @@ class ToolExecutor:
             channel: IRC channel context
 
         Returns:
-            JSON string with tool execution results
+            XML-wrapped JSON string with tool execution results
         """
         print(f"  Executing tool: {tool_name} with args: {arguments}")
 
         if tool_name == "search_chat_logs":
-            return await self._search_chat_logs(arguments, channel)
+            result = await self._search_chat_logs(arguments, channel)
         elif tool_name == "get_current_users":
-            return await self._get_current_users(arguments, channel)
+            result = await self._get_current_users(arguments, channel)
         else:
-            return json.dumps({"error": f"Unknown tool: {tool_name}"})
+            result = json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+        # Wrap result in XML tags for clarity
+        return f"<tool_result tool=\"{tool_name}\">\n{result}\n</tool_result>"
 
     async def _search_chat_logs(
         self,
