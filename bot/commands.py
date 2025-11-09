@@ -144,8 +144,9 @@ class CommandHandler:
 
             # Strip thinking tags from response (internal reasoning shouldn't go to IRC)
             import re
-            # Strip all <think>...</think> blocks (there might be multiple)
-            response_cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+            # Strip all thinking tag variants: <think>, <thinking>, <thought>, etc.
+            response_cleaned = re.sub(r'<think(?:ing)?>.*?</think(?:ing)?>', '', response, flags=re.DOTALL | re.IGNORECASE)
+            response_cleaned = re.sub(r'<thought>.*?</thought>', '', response_cleaned, flags=re.DOTALL | re.IGNORECASE)
             response_cleaned = response_cleaned.strip()
 
             # Also strip any timestamp/username prefix the AI might have added
