@@ -17,7 +17,8 @@ class CommandHandler:
         'ask': 'Ask the LLM a question without IRC context',
         'terrarium': 'Ask the LLM with full IRC channel context',
         'search': 'Search message history for a term',
-        'stats': 'Show channel statistics (messages, users, etc.)'
+        'stats': 'Show channel statistics (messages, users, etc.)',
+        'who': 'Show users currently in the channel'
     }
 
     @staticmethod
@@ -28,6 +29,7 @@ class CommandHandler:
         bot.register_command('terrarium', CommandHandler.cmd_terrarium)
         bot.register_command('search', CommandHandler.cmd_search)
         bot.register_command('stats', CommandHandler.cmd_stats)
+        bot.register_command('who', CommandHandler.cmd_who)
         bot.register_command('ping', CommandHandler.cmd_ping)
 
     @staticmethod
@@ -223,6 +225,29 @@ class CommandHandler:
                 messages.append(f"First logged: {stats['first_message']}")
 
             bot.send_messages(channel, messages)
+
+        except Exception as e:
+            bot.send_message(channel, f"{nick}: Error: {str(e)}")
+
+    @staticmethod
+    async def cmd_who(bot: 'TerrariumBot', channel: str, nick: str, args: str):
+        """Show users currently in the channel."""
+        try:
+            users = await bot.database.get_channel_users(channel)
+            count = len(users)
+
+            if count == 0:
+                bot.send_message(channel, f"{nick}: No users tracked for {channel} yet")
+                return
+
+            # Format users list (show up to 50, then summarize)
+            if count <= 50:
+                users_str = ', '.join(users)
+                bot.send_message(channel, f"{nick}: {count} users in {channel}: {users_str}")
+            else:
+                # Show first 50, then count
+                users_str = ', '.join(users[:50])
+                bot.send_message(channel, f"{nick}: {count} users in {channel} (showing first 50): {users_str}")
 
         except Exception as e:
             bot.send_message(channel, f"{nick}: Error: {str(e)}")

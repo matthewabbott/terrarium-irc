@@ -102,6 +102,12 @@ class TerrariumBot:
             else:
                 print(f"  {nick} joined {channel}")
 
+            # Add user to channel tracking
+            asyncio.run_coroutine_threadsafe(
+                self.database.add_user_to_channel(channel, nick),
+                self.loop
+            )
+
             # Log join event (run from thread-safe context)
             asyncio.run_coroutine_threadsafe(
                 self._log_event(
@@ -120,6 +126,14 @@ class TerrariumBot:
             nick = hostmask[0]
             reason = args[1] if len(args) > 1 else ""
 
+            print(f"  {nick} left {channel}")
+
+            # Remove user from channel tracking
+            asyncio.run_coroutine_threadsafe(
+                self.database.remove_user_from_channel(channel, nick),
+                self.loop
+            )
+
             # Log part event (run from thread-safe context)
             asyncio.run_coroutine_threadsafe(
                 self._log_event(
@@ -132,6 +146,40 @@ class TerrariumBot:
                 ),
                 self.loop
             )
+
+        @self.irc.Handler("QUIT", colon=False)
+        def handle_quit(irc, hostmask, args):
+            nick = hostmask[0]
+            reason = args[0] if args else ""
+
+            print(f"  {nick} quit ({reason})")
+
+            # Remove user from all channel tracking
+            asyncio.run_coroutine_threadsafe(
+                self.database.remove_user_from_all_channels(nick),
+                self.loop
+            )
+
+            # Note: QUIT events aren't channel-specific, so we don't log them to messages table
+            # They're already captured in the channel_users removal
+
+        @self.irc.Handler("353", colon=False)  # RPL_NAMREPLY
+        def handle_names(irc, hostmask, args):
+            # Format: :server 353 nick = #channel :nick1 nick2 nick3
+            channel = args[2]
+            names_str = args[3]
+            nicks = names_str.split()
+
+            print(f"  NAMES for {channel}: {len(nicks)} users")
+
+            # Add all users to channel tracking
+            for nick in nicks:
+                # Strip prefix characters (@, +, etc.)
+                clean_nick = nick.lstrip('@+%~&')
+                asyncio.run_coroutine_threadsafe(
+                    self.database.add_user_to_channel(channel, clean_nick),
+                    self.loop
+                )
 
         @self.irc.Handler("PRIVMSG", "NOTICE", colon=False)
         def handle_message(irc, hostmask, args):

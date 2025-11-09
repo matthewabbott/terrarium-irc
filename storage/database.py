@@ -67,6 +67,16 @@ class Database:
             )
         """)
 
+        # Track current users in each channel
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS channel_users (
+                channel TEXT NOT NULL,
+                nick TEXT NOT NULL,
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (channel, nick)
+            )
+        """)
+
         # Create indexes for performance
         # Composite index for the most common query: recent messages by channel
         await self.db.execute("""
@@ -318,6 +328,82 @@ class Database:
             WHERE channel = ?
         """, (channel,))
         await self.db.commit()
+
+    async def add_user_to_channel(self, channel: str, nick: str):
+        """
+        Add user to channel (on JOIN or NAMES).
+
+        Args:
+            channel: Channel name
+            nick: User nickname
+        """
+        await self.db.execute("""
+            INSERT OR REPLACE INTO channel_users (channel, nick, joined_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (channel, nick))
+        await self.db.commit()
+
+    async def remove_user_from_channel(self, channel: str, nick: str):
+        """
+        Remove user from channel (on PART).
+
+        Args:
+            channel: Channel name
+            nick: User nickname
+        """
+        await self.db.execute("""
+            DELETE FROM channel_users
+            WHERE channel = ? AND nick = ?
+        """, (channel, nick))
+        await self.db.commit()
+
+    async def remove_user_from_all_channels(self, nick: str):
+        """
+        Remove user from all channels (on QUIT).
+
+        Args:
+            nick: User nickname
+        """
+        await self.db.execute("""
+            DELETE FROM channel_users
+            WHERE nick = ?
+        """, (nick,))
+        await self.db.commit()
+
+    async def get_channel_users(self, channel: str) -> List[str]:
+        """
+        Get list of users currently in a channel.
+
+        Args:
+            channel: Channel name
+
+        Returns:
+            List of nicknames
+        """
+        cursor = await self.db.execute("""
+            SELECT nick FROM channel_users
+            WHERE channel = ?
+            ORDER BY nick
+        """, (channel,))
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+    async def get_channel_user_count(self, channel: str) -> int:
+        """
+        Get count of users in a channel.
+
+        Args:
+            channel: Channel name
+
+        Returns:
+            Number of users
+        """
+        cursor = await self.db.execute("""
+            SELECT COUNT(*) FROM channel_users
+            WHERE channel = ?
+        """, (channel,))
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
     async def close(self):
         """Close database connection."""
