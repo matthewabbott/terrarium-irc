@@ -25,6 +25,8 @@ MODEL_CONTEXT_LIMIT = 8192
 MIN_COMPLETION_TOKENS = 128
 MAX_COMPLETION_TOKENS = 512
 COMPLETION_BUFFER = 256  # reserved for safety
+MAX_TOOL_ITERATIONS = 8
+TOOL_WARNING_ITERATION = 5
 
 
 def _coerce_fallback_value(raw: str):
@@ -235,13 +237,26 @@ class CommandHandler:
             print("=== END CONTEXT SUMMARY ===\n")
 
             # Tool calling loop - keep calling until we get a final text response
-            max_iterations = 5  # Prevent infinite loops
+            max_iterations = MAX_TOOL_ITERATIONS
             iteration = 0
             final_response = None
+            warning_sent = False
 
             while iteration < max_iterations:
                 iteration += 1
                 print(f"\n=== TOOL LOOP ITERATION {iteration} ===")
+                if not warning_sent and iteration == TOOL_WARNING_ITERATION:
+                    warning_sent = True
+                    remaining = max_iterations - iteration + 1
+                    bot.send_message(channel, f"{nick}: Still working... ({remaining} tool iterations left)")
+                    warning_message = {
+                        "role": "system",
+                        "content": (
+                            f"Tool usage warning: you have {remaining} more tool iterations before the harness stops. "
+                            "Please wrap up as soon as possible."
+                        )
+                    }
+                    messages.append(warning_message)
                 max_completion_tokens, approx_prompt_tokens = _determine_max_tokens(messages)
                 print(f"  Approx prompt tokens: {approx_prompt_tokens}; reserving {max_completion_tokens} for completion.")
 
@@ -328,7 +343,10 @@ class CommandHandler:
                 break
 
             if final_response is None:
-                final_response = "Sorry, I couldn't complete that request (too many tool calls)."
+                final_response = (
+                    "Sorry, I couldn't complete that request because I hit the maximum number of tool iterations. "
+                    "Try simplifying the request or ask again."
+                )
 
             thinking_present = bool(re.search(r'<think(?:ing)?>|<thin>|<thought', final_response, flags=re.IGNORECASE))
 
