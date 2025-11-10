@@ -34,6 +34,16 @@ async def main():
     command_prefix = os.getenv('COMMAND_PREFIX', '!')
     max_context_messages = int(os.getenv('MAX_CONTEXT_MESSAGES', '20'))
 
+    # Search Configuration (optional)
+    search_api_url = os.getenv('SEARCH_API_URL', '').strip()
+    search_api_key = os.getenv('SEARCH_API_KEY', '').strip()
+    search_max_results = int(os.getenv('SEARCH_MAX_RESULTS', '5'))
+    search_config = {
+        "api_url": search_api_url or None,
+        "api_key": search_api_key or None,
+        "max_results": search_max_results
+    }
+
     # Database Configuration
     db_path = os.getenv('DB_PATH', './data/irc_logs.db')
 
@@ -89,7 +99,8 @@ async def main():
         context_manager=context_manager,
         use_ssl=irc_use_ssl,
         command_prefix=command_prefix,
-        max_context_messages=max_context_messages
+        max_context_messages=max_context_messages,
+        search_config=search_config
     )
 
     # Register commands

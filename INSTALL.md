@@ -98,6 +98,15 @@ COMMAND_PREFIX=!              # Command prefix (default: !)
 MAX_CONTEXT_MESSAGES=20       # Number of IRC messages to show Terra
 ```
 
+**Optional Web Search:**
+
+```ini
+# Example using a searxng instance
+SEARCH_API_URL=https://searx.your.domain/api/search
+SEARCH_API_KEY=                 # Only if your endpoint requires one
+SEARCH_MAX_RESULTS=5
+```
+
 ### 6. Test the Bot
 
 ```bash

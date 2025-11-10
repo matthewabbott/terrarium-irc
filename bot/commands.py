@@ -11,7 +11,8 @@ FALLBACK_TOOL_NAMES = {
     "get_current_users",
     "create_enhancement_request",
     "list_enhancement_requests",
-    "read_enhancement_request"
+    "read_enhancement_request",
+    "search_web"
 }
 _TOOL_RESULT_PATTERN = re.compile(
     r"<tool_result[^>]*>\s*(?P<body>.*?)\s*</tool_result>",
@@ -214,7 +215,7 @@ class CommandHandler:
             from llm.tool_executor import ToolExecutor
 
             tools = get_tool_definitions()
-            tool_executor = ToolExecutor(bot.database)
+            tool_executor = ToolExecutor(bot.database, search_config=getattr(bot, "search_config", {}))
 
             # Summarize context instead of dumping entire transcript
             irc_context_block = next(

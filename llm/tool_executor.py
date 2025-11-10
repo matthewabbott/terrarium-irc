@@ -4,11 +4,14 @@ Tool execution handlers for Terra's AI capabilities.
 Executes tool calls requested by the AI and returns results.
 """
 
+import asyncio
 import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, TYPE_CHECKING, List
+from typing import Dict, Any, TYPE_CHECKING, List, Optional
+
+import requests
 
 if TYPE_CHECKING:
     from storage import Database
@@ -20,16 +23,18 @@ class ToolExecutor:
     MAX_ENHANCEMENTS = 10
     CONTEXT_MESSAGES = 20
 
-    def __init__(self, database: 'Database'):
+    def __init__(self, database: 'Database', search_config: Optional[dict] = None):
         """
         Initialize tool executor.
 
         Args:
             database: Database instance for accessing IRC data
+            search_config: dict with search API settings
         """
         self.database = database
         self.enhancement_dir = Path("data/enhancements")
         self.enhancement_dir.mkdir(parents=True, exist_ok=True)
+        self.search_config = search_config or {}
 
     async def execute_tool(
         self,
@@ -60,6 +65,8 @@ class ToolExecutor:
             result = self._list_enhancement_requests()
         elif tool_name == "read_enhancement_request":
             result = self._read_enhancement_request(arguments)
+        elif tool_name == "search_web":
+            result = await self._search_web(arguments)
         else:
             result = json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -278,3 +285,56 @@ class ToolExecutor:
             "file": filename,
             "content": truncated
         })
+
+    async def _search_web(self, arguments: Dict[str, Any]) -> str:
+        """
+        Run a web search via the configured API.
+        """
+        api_url = (self.search_config.get("api_url") or "").strip()
+        if not api_url:
+            return json.dumps({"error": "Web search is not configured on this bot."})
+
+        query = (arguments.get("query") or "").strip()
+        max_results = int(arguments.get("max_results") or self.search_config.get("max_results", 5))
+        max_results = max(1, min(max_results, 10))
+
+        if not query:
+            return json.dumps({"error": "query parameter is required"})
+
+        loop = asyncio.get_running_loop()
+        try:
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.get(
+                    api_url,
+                    params={"q": query, "num": max_results},
+                    headers=self._build_search_headers(),
+                    timeout=10
+                )
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception as exc:
+            return json.dumps({"error": f"Search failed: {exc}"})
+
+        results = data.get("results") or data.get("data") or []
+        formatted = []
+        for item in results[:max_results]:
+            formatted.append({
+                "title": item.get("title") or item.get("name"),
+                "url": item.get("url") or item.get("link"),
+                "snippet": item.get("snippet") or item.get("excerpt") or item.get("summary")
+            })
+
+        return json.dumps({
+            "result": f"Found {len(formatted)} web result(s)",
+            "query": query,
+            "results": formatted
+        })
+
+    def _build_search_headers(self) -> Dict[str, str]:
+        headers = {}
+        api_key = self.search_config.get("api_key")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers

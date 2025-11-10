@@ -339,6 +339,7 @@ get_current_users() - List who's currently in the channel
 create_enhancement_request(title, summary) - Capture an enhancement idea (max 10 open requests)
 list_enhancement_requests() - See which enhancement files already exist
 read_enhancement_request(filename) - Read the contents of a specific enhancement file
+search_web(query, max_results?) - Search the web when IRC history isn't enough
 
 Example tool usage:
 - "What did alice say about docker?" → search_chat_logs(query="docker", user="alice")
@@ -347,6 +348,7 @@ Example tool usage:
 - "I need a new feature" → create_enhancement_request(title="Better context", summary="... why ...")
 - "What did I already ask for?" → list_enhancement_requests()
 - "Remind me what 'better context' request said" → read_enhancement_request(filename="20241109-better-context.md")
+- "Find release notes" → search_web(query="GLM 4.5 release notes", max_results=3)
 
 When you need a tool, call it explicitly (the harness handles execution). **Do NOT** fabricate `<tool_result>` blocks—those come from the harness after the tool actually runs. Enhancement requests are limited; only create one when it's actionable, and reference existing files when possible. Though on the other hand, get creative. If you don't know whether it'll be actionable, feel free to ask. Someone in the IRC will probably have a good idea as to whether that's so, and with low probability they might even tell you!
 

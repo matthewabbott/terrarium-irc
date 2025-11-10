@@ -1356,3 +1356,27 @@ async def test_full_conversation_flow():
 - [terrarium-agent/client_library.py](file:///home/consulear/Programming/terrarium-agent/client_library.py)
 - [terrarium-irc/ARCHITECTURE.md](file:///home/consulear/Programming/terrarium-irc/ARCHITECTURE.md)
 - [terrarium-irc/DATABASE.md](file:///home/consulear/Programming/terrarium-irc/DATABASE.md)
+#### 4. `search_web`
+
+**Purpose**: Fetch up-to-date information from an external search API (Brave, searxng, SerpAPI, etc.).
+
+**Definition**:
+```json
+{
+  "name": "search_web",
+  "description": "Search the web for current information when IRC logs aren't enough.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string" },
+      "max_results": { "type": "integer", "minimum": 1, "maximum": 10 }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+**Implementation Notes**:
+- Terra-irc calls whatever endpoint is configured via `SEARCH_API_URL` and expects JSON with a `results` array (`title`, `url`, `snippet`).
+- Requests are capped at ~5 results by default (`SEARCH_MAX_RESULTS`) to minimize token usage.
+- If no endpoint is configured the tool returns an explanatory error.

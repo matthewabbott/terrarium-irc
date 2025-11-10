@@ -209,6 +209,8 @@ Terra has three tools for tracking her own wish-list:
 - `list_enhancement_requests()` — enumerates the existing markdown files
 - `read_enhancement_request(filename)` — returns the contents of a specific file
 
+If `SEARCH_API_URL` is configured, Terra also gets `search_web(query, max_results?)`, which hits the configured endpoint (typically searx/Brave/SerpAPI) and returns structured title/url/snippet results.
+
 These files are gitignored but should be backed up with the rest of `data/`. When editing tooling or prompts, keep the limit logic (`ToolExecutor.MAX_ENHANCEMENTS`) in mind.
 
 ## Common Development Patterns

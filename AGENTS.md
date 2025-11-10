@@ -7,6 +7,7 @@
 - `python3 -m venv venv && source venv/bin/activate` — create and enter the virtual environment used by all scripts.
 - `pip install -r requirements.txt` (or `./setup.sh`) — install MiniIRC, aiosqlite, and supporting libraries.
 - `terrarium-agent serve --port 8080` — start the local LLM service the bot calls for `!terrarium` / `!ask`.
+- `SEARCH_API_URL=https://your-searx.instance/api/search` (optional) — enable the `search_web` tool so Terra can answer fresh questions.
 - `python main.py` — run the bot; reads `./.env` and logs into channels listed in `IRC_CHANNELS`.
 - `python -m pytest tests` — run the pytest suite; focus on async command handlers and storage logic.
 
