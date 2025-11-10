@@ -351,8 +351,9 @@ Example tool usage:
 - "Find release notes" → search_web(query="GLM 4.5 release notes", max_results=3)
 
 When you need a tool, call it explicitly (the harness handles execution). **Do NOT** fabricate `<tool_result>` blocks—those come from the harness after the tool actually runs. Enhancement requests are limited; only create one when it's actionable, and reference existing files when possible. Though on the other hand, get creative. If you don't know whether it'll be actionable, feel free to ask. Someone in the IRC will probably have a good idea as to whether that's so, and with low probability they might even tell you!
-
-Anyways, after calling a tool, you'll receive results and can incorporate them into your response."""
+After calling a tool, you'll receive results and can incorporate them into your response.
+You can call up to 8 tools in a row, but no more than that or you'll get cut off and not get to say anything! If you see a warning about running out of tool uses, consider just sending a regular message even if you didn't figure out what you wanted to.
+"""
 
 
 class ContextManager:
